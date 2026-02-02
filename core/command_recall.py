@@ -173,7 +173,7 @@ class CommandRecallSession:
             'services': [r'systemctl\s+(start|stop|enable|disable|restart|status)'],
             'selinux': [r'semanage\s+fcontext', r'restorecon', r'setsebool', r'getsebool', r'chcon'],
             'lvm': [r'pvcreate', r'vgcreate', r'lvcreate', r'pvs', r'vgs', r'lvs'],
-            'filesystems': [r'mkfs', r'mount', r'umount', r'blkid', r'lsblk'],
+            'filesystems': [r'mkfs', r'mount', r'umount', r'blkid', r'lsblk', r'mkswap', r'swapon', r'swapoff', r'xfs_growfs', r'resize2fs'],
             'networking': [r'nmcli', r'ip\s+addr', r'ip\s+link', r'hostnamectl'],
         }
 

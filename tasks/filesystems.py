@@ -214,7 +214,7 @@ class PersistentMountTask(BaseTask):
         )
 
         self.hints = [
-            f"Get UUID: blkid {self.device}",
+            ff"Get UUID: blkid {self.device}",
             f"Create mount point: mkdir -p {self.mount_point}",
             "Edit /etc/fstab and add: UUID=<uuid> <mount_point> <fstype> <options> 0 0",
             "Mount all fstab entries: mount -a",
@@ -352,7 +352,7 @@ class ConfigureSwapTask(BaseTask):
             f"Activate swap: swapon {self.device}",
             "Verify: swapon --show or free -m",
             "Add to /etc/fstab: UUID=<uuid> none swap defaults 0 0",
-            "Get UUID: blkid {self.device}"
+            f"Get UUID: blkid {self.device}"
         ]
 
         return self

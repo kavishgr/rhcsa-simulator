@@ -10,6 +10,7 @@ from tasks.registry import TaskRegistry
 from core.validator import ValidationCheck, ValidationResult
 from validators.safe_executor import execute_safe
 from validators.file_validators import validate_file_exists, validate_file_contains
+from utils.helpers import get_practice_device
 
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class CreateStratisPoolTask(BaseTask):
         """Generate Stratis pool creation task."""
         pool_num = random.randint(1, 99)
         self.pool_name = params.get('pool_name', f'stratispool{pool_num}')
-        self.device = params.get('device', '/dev/sdc')
+        self.device = params.get('device') or get_practice_device() or '/dev/sdc'
 
         self.description = (
             f"Create a Stratis storage pool:\n"

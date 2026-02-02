@@ -66,7 +66,7 @@ SAFE_VALIDATION_COMMANDS = {
 
     # Filesystem info
     'df', 'mount', 'lsblk', 'blkid', 'findmnt', 'xfs_info', 'tune2fs',
-    'dumpe2fs', 'file',
+    'dumpe2fs', 'file', 'swapon', 'free',
 
     # LVM info
     'pvs', 'vgs', 'lvs', 'pvdisplay', 'vgdisplay', 'lvdisplay',

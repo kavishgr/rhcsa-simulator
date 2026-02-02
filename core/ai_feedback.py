@@ -83,7 +83,7 @@ class AIFeedbackAgent:
 
             # Call Claude API
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-20250514",
                 max_tokens=1024,
                 messages=[{
                     "role": "user",
@@ -140,7 +140,7 @@ Explain in 2-3 sentences:
 Be concise, specific, and educational. Focus on the root cause, not just symptoms."""
 
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-20250514",
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -191,7 +191,7 @@ Suggest the NEXT logical step they should take. Be specific about:
 Keep it concise (2-3 sentences). Don't give away the entire solution, just the next step."""
 
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-20250514",
                 max_tokens=384,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -249,7 +249,7 @@ Provide brief feedback on:
 Keep it encouraging and educational (3-4 sentences)."""
 
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-20250514",
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -363,7 +363,7 @@ Give ONE important exam tip or common mistake to avoid for this type of task.
 Keep it to 1-2 sentences. Be specific and practical."""
 
             response = self.client.messages.create(
-                model="claude-3-5-haiku-20241022",  # Use Haiku for quick insights
+                model="claude-haiku-3-5-20241022",  # Use Haiku for quick insights
                 max_tokens=128,
                 messages=[{"role": "user", "content": prompt}]
             )

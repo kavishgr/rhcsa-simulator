@@ -53,7 +53,7 @@ class PullContainerImageTask(BaseTask):
             f"Pull image: podman pull {self.image_name}",
             "List images: podman images",
             "Search for images: podman search <name>",
-            "Inspect image: podman inspect {image}"
+            f"Inspect image: podman inspect {self.image_name}"
         ]
 
         return self
@@ -217,7 +217,7 @@ class PersistentContainerTask(BaseTask):
         self.hints = [
             f"Create and run container first: podman run -d --name {self.container_name} {self.image_name}",
             f"Generate systemd unit: podman generate systemd --new --name {self.container_name} > ~/.config/systemd/user/{self.service_name}",
-            "Or for system: podman generate systemd --new --name {name} | sudo tee /etc/systemd/system/{service}",
+            f"Or for system: podman generate systemd --new --name {self.container_name} | sudo tee /etc/systemd/system/{self.service_name}",
             "Reload systemd: systemctl --user daemon-reload (or sudo systemctl daemon-reload for system)",
             f"Enable: systemctl --user enable {self.service_name}",
             f"Start: systemctl --user start {self.service_name}",
@@ -413,4 +413,261 @@ class ContainerVolumeTask(BaseTask):
             ))
 
         passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("containers")
+class StopRemoveContainerTask(BaseTask):
+    """Stop and remove a container."""
+
+    def __init__(self):
+        super().__init__(
+            id="container_stop_remove_001",
+            category="containers",
+            difficulty="easy",
+            points=6
+        )
+        self.container_name = None
+
+    def generate(self, **params):
+        self.container_name = params.get('name', f'old-container{random.randint(1,99)}')
+
+        self.description = (
+            f"Stop and remove a container:\n"
+            f"  - Container name: {self.container_name}\n"
+            f"  - Stop the container if running\n"
+            f"  - Remove the container completely"
+        )
+
+        self.hints = [
+            f"Stop container: podman stop {self.container_name}",
+            f"Remove container: podman rm {self.container_name}",
+            f"Or force remove: podman rm -f {self.container_name}",
+            "List containers: podman ps -a",
+            f"Verify: podman ps -a | grep {self.container_name} (should be empty)"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: Container should NOT exist
+        if not validate_container_exists(self.container_name):
+            checks.append(ValidationCheck(
+                name="container_removed",
+                passed=True,
+                points=6,
+                message=f"Container successfully removed"
+            ))
+            total_points += 6
+        else:
+            checks.append(ValidationCheck(
+                name="container_removed",
+                passed=False,
+                points=0,
+                max_points=6,
+                message=f"Container '{self.container_name}' still exists"
+            ))
+
+        passed = total_points >= (self.points * 0.8)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("containers")
+class ContainerEnvVarsTask(BaseTask):
+    """Run a container with environment variables."""
+
+    def __init__(self):
+        super().__init__(
+            id="container_env_001",
+            category="containers",
+            difficulty="medium",
+            points=10
+        )
+        self.container_name = None
+        self.image_name = None
+        self.env_vars = None
+
+    def generate(self, **params):
+        self.container_name = params.get('name', f'app{random.randint(1,99)}')
+        self.image_name = params.get('image', 'docker.io/library/httpd:latest')
+        self.env_vars = params.get('env', {'APP_ENV': 'production', 'DEBUG': 'false'})
+
+        env_str = ', '.join([f'{k}={v}' for k, v in self.env_vars.items()])
+
+        self.description = (
+            f"Run a container with environment variables:\n"
+            f"  - Container name: {self.container_name}\n"
+            f"  - Image: {self.image_name}\n"
+            f"  - Environment variables: {env_str}\n"
+            f"  - Run in detached mode"
+        )
+
+        env_flags = ' '.join([f'-e {k}={v}' for k, v in self.env_vars.items()])
+        self.hints = [
+            f"Run with env: podman run -d --name {self.container_name} {env_flags} {self.image_name}",
+            "Use -e KEY=VALUE for each environment variable",
+            f"Verify: podman inspect {self.container_name} | grep -A5 Env",
+            f"Or: podman exec {self.container_name} env"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check 1: Container exists and running (5 points)
+        if validate_container_running(self.container_name):
+            checks.append(ValidationCheck(
+                name="container_running",
+                passed=True,
+                points=5,
+                message=f"Container is running"
+            ))
+            total_points += 5
+
+            # Check 2: Environment variables set (5 points)
+            result = execute_safe(['podman', 'inspect', self.container_name, '--format', '{{.Config.Env}}'])
+            if result.success:
+                env_found = True
+                for key, value in self.env_vars.items():
+                    if f'{key}={value}' not in result.stdout:
+                        env_found = False
+                        break
+
+                if env_found:
+                    checks.append(ValidationCheck(
+                        name="env_vars_set",
+                        passed=True,
+                        points=5,
+                        message=f"Environment variables are set correctly"
+                    ))
+                    total_points += 5
+                else:
+                    checks.append(ValidationCheck(
+                        name="env_vars_set",
+                        passed=False,
+                        points=0,
+                        max_points=5,
+                        message=f"Environment variables not set correctly"
+                    ))
+            else:
+                checks.append(ValidationCheck(
+                    name="env_vars_set",
+                    passed=False,
+                    points=0,
+                    max_points=5,
+                    message=f"Could not inspect container"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="container_running",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f"Container not running"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("containers")
+class InspectContainerTask(BaseTask):
+    """Inspect container configuration and extract information."""
+
+    def __init__(self):
+        super().__init__(
+            id="container_inspect_001",
+            category="containers",
+            difficulty="medium",
+            points=8
+        )
+        self.container_name = None
+        self.output_file = None
+
+    def generate(self, **params):
+        self.container_name = params.get('name', 'httpd')
+        self.output_file = params.get('output', '/tmp/container_info.txt')
+
+        self.description = (
+            f"Inspect a container and save information:\n"
+            f"  - Container: {self.container_name}\n"
+            f"  - Save the container's IP address to: {self.output_file}\n"
+            f"  - Extract the IP using podman inspect"
+        )
+
+        self.hints = [
+            f"Get IP: podman inspect {self.container_name} --format '{{{{.NetworkSettings.IPAddress}}}}'",
+            f"Save to file: podman inspect {self.container_name} --format '{{{{.NetworkSettings.IPAddress}}}}' > {self.output_file}",
+            "Use --format with Go templates to extract specific values",
+            f"View all info: podman inspect {self.container_name}"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: Output file exists and has content
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=True,
+                points=4,
+                message=f"Output file exists"
+            ))
+            total_points += 4
+
+            try:
+                with open(self.output_file, 'r') as f:
+                    content = f.read().strip()
+                    # Check if it looks like an IP address
+                    import re
+                    if content and re.match(r'\d+\.\d+\.\d+\.\d+', content):
+                        checks.append(ValidationCheck(
+                            name="has_ip",
+                            passed=True,
+                            points=4,
+                            message=f"File contains IP address: {content}"
+                        ))
+                        total_points += 4
+                    elif content:
+                        checks.append(ValidationCheck(
+                            name="has_ip",
+                            passed=True,
+                            points=2,
+                            message=f"File has content (partial credit)"
+                        ))
+                        total_points += 2
+                    else:
+                        checks.append(ValidationCheck(
+                            name="has_ip",
+                            passed=False,
+                            points=0,
+                            max_points=4,
+                            message=f"File is empty"
+                        ))
+            except Exception:
+                checks.append(ValidationCheck(
+                    name="has_ip",
+                    passed=False,
+                    points=0,
+                    max_points=4,
+                    message=f"Could not read file"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Output file not found"
+            ))
+
+        passed = total_points >= (self.points * 0.6)
         return ValidationResult(self.id, passed, total_points, self.points, checks)

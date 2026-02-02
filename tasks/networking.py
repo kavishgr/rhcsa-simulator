@@ -56,8 +56,8 @@ class ConfigureStaticIPTask(BaseTask):
             f"Set IP: nmcli con mod {self.connection_name} ipv4.addresses {self.ip_address}/{self.netmask}",
             f"Set method to manual: nmcli con mod {self.connection_name} ipv4.method manual",
             f"Activate: nmcli con up {self.connection_name}",
-            "Verify: ip addr show {interface} or nmcli con show {connection}",
-            "Check persistent config: nmcli -f ipv4 con show {connection}"
+            f"Verify: ip addr show {self.interface} or nmcli con show {self.connection_name}",
+            f"Check persistent config: nmcli -f ipv4 con show {self.connection_name}"
         ]
 
         return self
@@ -169,7 +169,7 @@ class ConfigureDefaultGatewayTask(BaseTask):
             f"Set gateway: nmcli con mod {self.connection_name} ipv4.gateway {self.gateway}",
             f"Activate connection: nmcli con up {self.connection_name}",
             "Verify: ip route show default",
-            "Or verify: nmcli -f ipv4 con show {connection}"
+            f"Or verify: nmcli -f ipv4 con show {self.connection_name}"
         ]
 
         return self
@@ -256,7 +256,7 @@ class ConfigureDNSTask(BaseTask):
             f"Set DNS: nmcli con mod {self.connection_name} ipv4.dns \"{dns_list}\"",
             f"Activate: nmcli con up {self.connection_name}",
             "Verify: cat /etc/resolv.conf",
-            "Or verify: nmcli -f ipv4 con show {connection}"
+            f"Or verify: nmcli -f ipv4 con show {self.connection_name}"
         ]
 
         return self
@@ -535,6 +535,263 @@ class ConfigureNetworkFullTask(BaseTask):
                 points=0,
                 max_points=3,
                 message=f"Interface is {state}"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class ConfigureFirewallServiceTask(BaseTask):
+    """Allow a service through the firewall."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_firewall_service_001",
+            category="networking",
+            difficulty="medium",
+            points=8
+        )
+        self.service = None
+        self.zone = None
+
+    def generate(self, **params):
+        services = ['http', 'https', 'ssh', 'nfs', 'samba', 'ftp']
+        self.service = params.get('service', random.choice(services))
+        self.zone = params.get('zone', 'public')
+
+        self.description = (
+            f"Configure firewall to allow a service:\n"
+            f"  - Service: {self.service}\n"
+            f"  - Zone: {self.zone}\n"
+            f"  - Make the change permanent\n"
+            f"  - Ensure firewalld is running"
+        )
+
+        self.hints = [
+            "Ensure firewalld is running: systemctl status firewalld",
+            f"Add service: firewall-cmd --zone={self.zone} --add-service={self.service} --permanent",
+            "Reload firewall: firewall-cmd --reload",
+            f"Verify: firewall-cmd --zone={self.zone} --list-services",
+            "Without --permanent, changes are lost on reload/reboot"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        from validators.safe_executor import execute_safe
+
+        # Check 1: Firewalld is running (3 points)
+        result = execute_safe(['systemctl', 'is-active', 'firewalld'])
+        if result.success and result.stdout.strip() == 'active':
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=True,
+                points=3,
+                message=f"firewalld is running"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"firewalld is not running"
+            ))
+
+        # Check 2: Service is allowed (5 points)
+        result = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-services'])
+        if result.success and self.service in result.stdout:
+            checks.append(ValidationCheck(
+                name="service_allowed",
+                passed=True,
+                points=5,
+                message=f"Service '{self.service}' is allowed in zone {self.zone}"
+            ))
+            total_points += 5
+        else:
+            checks.append(ValidationCheck(
+                name="service_allowed",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f"Service '{self.service}' is not allowed"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class ConfigureFirewallPortTask(BaseTask):
+    """Allow a specific port through the firewall."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_firewall_port_001",
+            category="networking",
+            difficulty="medium",
+            points=8
+        )
+        self.port = None
+        self.protocol = None
+        self.zone = None
+
+    def generate(self, **params):
+        ports = [8080, 8443, 3000, 5000, 9090]
+        self.port = params.get('port', random.choice(ports))
+        self.protocol = params.get('protocol', 'tcp')
+        self.zone = params.get('zone', 'public')
+
+        self.description = (
+            f"Configure firewall to allow a port:\n"
+            f"  - Port: {self.port}/{self.protocol}\n"
+            f"  - Zone: {self.zone}\n"
+            f"  - Make the change permanent\n"
+            f"  - Reload firewall to apply"
+        )
+
+        self.hints = [
+            f"Add port: firewall-cmd --zone={self.zone} --add-port={self.port}/{self.protocol} --permanent",
+            "Reload: firewall-cmd --reload",
+            f"Verify: firewall-cmd --zone={self.zone} --list-ports",
+            "Port format: <port>/<protocol> (e.g., 8080/tcp)",
+            "Check current zone: firewall-cmd --get-active-zones"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        from validators.safe_executor import execute_safe
+
+        # Check 1: Firewalld is running (3 points)
+        result = execute_safe(['systemctl', 'is-active', 'firewalld'])
+        if result.success and result.stdout.strip() == 'active':
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=True,
+                points=3,
+                message=f"firewalld is running"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"firewalld is not running"
+            ))
+
+        # Check 2: Port is allowed (5 points)
+        result = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-ports'])
+        port_str = f'{self.port}/{self.protocol}'
+        if result.success and port_str in result.stdout:
+            checks.append(ValidationCheck(
+                name="port_allowed",
+                passed=True,
+                points=5,
+                message=f"Port {port_str} is allowed"
+            ))
+            total_points += 5
+        else:
+            checks.append(ValidationCheck(
+                name="port_allowed",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f"Port {port_str} is not allowed"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class ConfigureFirewallRichRuleTask(BaseTask):
+    """Configure a rich rule in firewalld."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_firewall_rich_001",
+            category="networking",
+            difficulty="exam",
+            points=12
+        )
+        self.source_ip = None
+        self.port = None
+        self.action = None
+
+    def generate(self, **params):
+        self.source_ip = params.get('source', f'192.168.{random.randint(1,254)}.0/24')
+        self.port = params.get('port', random.choice([22, 80, 443, 8080]))
+        self.action = params.get('action', 'accept')
+
+        self.description = (
+            f"Configure a firewall rich rule:\n"
+            f"  - Allow traffic from: {self.source_ip}\n"
+            f"  - To port: {self.port}/tcp\n"
+            f"  - Action: {self.action}\n"
+            f"  - Make the rule permanent\n"
+            f"  - Reload firewall to apply"
+        )
+
+        self.hints = [
+            f"Rich rule format: rule family='ipv4' source address='{self.source_ip}' port port={self.port} protocol=tcp accept",
+            f"Add rule: firewall-cmd --add-rich-rule='rule family=\"ipv4\" source address=\"{self.source_ip}\" port port=\"{self.port}\" protocol=\"tcp\" accept' --permanent",
+            "Reload: firewall-cmd --reload",
+            "List rich rules: firewall-cmd --list-rich-rules",
+            "Rich rules allow more complex firewall configurations"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        from validators.safe_executor import execute_safe
+
+        # Check 1: Firewalld is running (4 points)
+        result = execute_safe(['systemctl', 'is-active', 'firewalld'])
+        if result.success and result.stdout.strip() == 'active':
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=True,
+                points=4,
+                message=f"firewalld is running"
+            ))
+            total_points += 4
+        else:
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"firewalld is not running"
+            ))
+
+        # Check 2: Rich rule exists (8 points)
+        result = execute_safe(['firewall-cmd', '--list-rich-rules'])
+        if result.success and self.source_ip in result.stdout and str(self.port) in result.stdout:
+            checks.append(ValidationCheck(
+                name="rich_rule_exists",
+                passed=True,
+                points=8,
+                message=f"Rich rule configured correctly"
+            ))
+            total_points += 8
+        else:
+            checks.append(ValidationCheck(
+                name="rich_rule_exists",
+                passed=False,
+                points=0,
+                max_points=8,
+                message=f"Rich rule not found or incomplete"
             ))
 
         passed = total_points >= (self.points * 0.7)

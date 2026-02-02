@@ -568,7 +568,7 @@ class DefaultACLTask(BaseTask):
             f"Set DEFAULT ACL: setfacl -d -m u:{self.acl_user}:{self.acl_perms} {self.dir_path}",
             "The -d flag sets DEFAULT ACL (affects new files)",
             "Without -d, ACL only affects the directory itself",
-            "Verify with: getfacl {dir} | grep default"
+            f"Verify with: getfacl {self.dir_path} | grep default"
         ]
 
         return self

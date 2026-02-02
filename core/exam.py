@@ -1,5 +1,7 @@
 """
-Exam mode orchestrator for RHCSA Simulator.
+Exam mode orchestrator for RHCSA Simulator v2.0.0
+
+Features auto-cleanup between tasks via DeviceManager.
 """
 
 import time
@@ -11,6 +13,7 @@ from core.validator import get_validator
 from core.results import ExamResult, TaskResult, get_results_manager
 from utils import formatters as fmt
 from utils.helpers import generate_id, format_timedelta, confirm_action
+from device import get_device_manager
 
 
 logger = logging.getLogger(__name__)
@@ -101,6 +104,14 @@ class ExamSession:
         print(fmt.warning("Note: This simulator only validates your work. It does NOT make changes to your system."))
         print()
 
+        # Show cleanup status
+        device_manager = get_device_manager()
+        device = device_manager.get_practice_device()
+        if device:
+            print(fmt.info(f"Practice device: {device}"))
+            print(fmt.dim("Auto-cleanup will run after exam completion."))
+            print()
+
     def _display_tasks(self):
         """Display all exam tasks."""
         fmt.print_header("EXAM TASKS")
@@ -180,6 +191,12 @@ class ExamSession:
         filepath = results_mgr.save_result(exam_result)
         if filepath:
             print(f"\n{fmt.success('Result saved to:')} {filepath}")
+
+        # Cleanup resources after exam
+        device_manager = get_device_manager()
+        print(f"\n{fmt.info('Cleaning up practice resources...')}")
+        device_manager.cleanup_all_resources(force=True)
+        print(fmt.success("Cleanup complete."))
 
         return exam_result
 

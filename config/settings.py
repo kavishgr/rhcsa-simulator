@@ -150,5 +150,5 @@ RHCSA_OBJECTIVES = {
 }
 
 # Version
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 APP_NAME = "RHCSA Mock Exam Simulator"

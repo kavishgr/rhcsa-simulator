@@ -1007,3 +1007,249 @@ class UserExpirationTask(BaseTask):
 
         passed = total_points >= (self.points * 0.7)
         return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("users_groups")
+class CollaborativeDirectoryTask(BaseTask):
+    """Create a collaborative directory for a group."""
+
+    def __init__(self):
+        super().__init__(
+            id="user_collab_dir_001",
+            category="users_groups",
+            difficulty="exam",
+            points=15
+        )
+        self.group_name = None
+        self.directory = None
+
+    def generate(self, **params):
+        suffix = random.randint(1, 99)
+        self.group_name = params.get('group', f'devteam{suffix}')
+        self.directory = params.get('directory', f'/shared/{self.group_name}')
+
+        self.description = (
+            f"Create a collaborative directory:\n"
+            f"  - Directory: {self.directory}\n"
+            f"  - Group: {self.group_name}\n"
+            f"  - Group ownership on directory\n"
+            f"  - Set SGID bit so new files inherit group\n"
+            f"  - Permissions: rwxrwx--- (770)\n"
+            f"  - Members can read/write but others cannot access"
+        )
+
+        self.hints = [
+            f"Create group: groupadd {self.group_name}",
+            f"Create directory: mkdir -p {self.directory}",
+            f"Set group ownership: chgrp {self.group_name} {self.directory}",
+            f"Set permissions with SGID: chmod 2770 {self.directory}",
+            "SGID ensures new files inherit the group",
+            f"Verify: ls -ld {self.directory}"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        import os
+        import stat
+
+        # Check 1: Group exists (3 points)
+        if validate_group_exists(self.group_name):
+            checks.append(ValidationCheck(
+                name="group_exists",
+                passed=True,
+                points=3,
+                message=f"Group '{self.group_name}' exists"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="group_exists",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Group '{self.group_name}' not found"
+            ))
+
+        # Check 2: Directory exists (2 points)
+        if os.path.exists(self.directory) and os.path.isdir(self.directory):
+            checks.append(ValidationCheck(
+                name="dir_exists",
+                passed=True,
+                points=2,
+                message=f"Directory exists"
+            ))
+            total_points += 2
+
+            # Check 3: Group ownership (3 points)
+            dir_stat = os.stat(self.directory)
+            import grp
+            try:
+                actual_group = grp.getgrgid(dir_stat.st_gid).gr_name
+                if actual_group == self.group_name:
+                    checks.append(ValidationCheck(
+                        name="group_ownership",
+                        passed=True,
+                        points=3,
+                        message=f"Group ownership is correct"
+                    ))
+                    total_points += 3
+                else:
+                    checks.append(ValidationCheck(
+                        name="group_ownership",
+                        passed=False,
+                        points=0,
+                        max_points=3,
+                        message=f"Group is {actual_group}, expected {self.group_name}"
+                    ))
+            except Exception:
+                checks.append(ValidationCheck(
+                    name="group_ownership",
+                    passed=False,
+                    points=0,
+                    max_points=3,
+                    message=f"Could not verify group ownership"
+                ))
+
+            # Check 4: SGID bit set (4 points)
+            mode = dir_stat.st_mode
+            if mode & stat.S_ISGID:
+                checks.append(ValidationCheck(
+                    name="sgid_set",
+                    passed=True,
+                    points=4,
+                    message=f"SGID bit is set"
+                ))
+                total_points += 4
+            else:
+                checks.append(ValidationCheck(
+                    name="sgid_set",
+                    passed=False,
+                    points=0,
+                    max_points=4,
+                    message=f"SGID bit is not set"
+                ))
+
+            # Check 5: Permissions (3 points)
+            perms = stat.S_IMODE(mode) & 0o777
+            if perms == 0o770:
+                checks.append(ValidationCheck(
+                    name="permissions",
+                    passed=True,
+                    points=3,
+                    message=f"Permissions are 770"
+                ))
+                total_points += 3
+            else:
+                checks.append(ValidationCheck(
+                    name="permissions",
+                    passed=False,
+                    points=0,
+                    max_points=3,
+                    message=f"Permissions are {oct(perms)}, expected 0o770"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="dir_exists",
+                passed=False,
+                points=0,
+                max_points=2,
+                message=f"Directory not found"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("users_groups")
+class DeleteUserTask(BaseTask):
+    """Delete a user account and optionally their home directory."""
+
+    def __init__(self):
+        super().__init__(
+            id="user_delete_001",
+            category="users_groups",
+            difficulty="easy",
+            points=6
+        )
+        self.username = None
+        self.remove_home = True
+
+    def generate(self, **params):
+        self.username = params.get('username', f'tempuser{random.randint(1,99)}')
+        self.remove_home = params.get('remove_home', True)
+
+        home_action = "remove" if self.remove_home else "keep"
+
+        self.description = (
+            f"Delete a user account:\n"
+            f"  - Username: {self.username}\n"
+            f"  - Home directory: {home_action}\n"
+            f"  - Ensure user is completely removed"
+        )
+
+        if self.remove_home:
+            self.hints = [
+                f"Delete user and home: userdel -r {self.username}",
+                "The -r flag removes home directory and mail spool",
+                f"Verify: id {self.username} (should fail)",
+                f"Check home: ls /home/{self.username} (should not exist)"
+            ]
+        else:
+            self.hints = [
+                f"Delete user only: userdel {self.username}",
+                "Without -r, home directory is preserved",
+                f"Verify: id {self.username} (should fail)"
+            ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        import os
+
+        # Check: User should NOT exist
+        if not validate_user_exists(self.username):
+            checks.append(ValidationCheck(
+                name="user_deleted",
+                passed=True,
+                points=4,
+                message=f"User '{self.username}' successfully deleted"
+            ))
+            total_points += 4
+        else:
+            checks.append(ValidationCheck(
+                name="user_deleted",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"User '{self.username}' still exists"
+            ))
+
+        # Check home directory if remove_home was required
+        if self.remove_home:
+            home_dir = f'/home/{self.username}'
+            if not os.path.exists(home_dir):
+                checks.append(ValidationCheck(
+                    name="home_removed",
+                    passed=True,
+                    points=2,
+                    message=f"Home directory removed"
+                ))
+                total_points += 2
+            else:
+                checks.append(ValidationCheck(
+                    name="home_removed",
+                    passed=False,
+                    points=0,
+                    max_points=2,
+                    message=f"Home directory still exists"
+                ))
+        else:
+            total_points += 2  # Give points if home removal wasn't required
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)

@@ -1,5 +1,7 @@
 """
-Main menu system for RHCSA Simulator.
+Main menu system for RHCSA Simulator v2.0.0
+
+Streamlined interface with quick-access modes.
 """
 
 import sys
@@ -10,11 +12,28 @@ from config import settings
 class MenuSystem:
     """
     Main menu system for the application.
+
+    v2.0.0 Features:
+    - Simplified 9-option menu (down from 15)
+    - Quick-access keys for common actions
+    - Auto-cleanup status display
     """
 
     def __init__(self):
         """Initialize menu system."""
-        pass
+        self._device_info = None
+
+    def _get_device_info(self):
+        """Get practice device info for display."""
+        if self._device_info is None:
+            try:
+                from device import get_device_manager
+                dm = get_device_manager()
+                device = dm.get_practice_device()
+                self._device_info = device if device else "No practice device"
+            except Exception:
+                self._device_info = "Unknown"
+        return self._device_info
 
     def display_main_menu(self):
         """Display main menu and get selection."""
@@ -22,67 +41,78 @@ class MenuSystem:
             fmt.clear_screen()
             self._print_header()
 
-            print(fmt.bold("Main Menu:"))
-            print()
-            print(fmt.dim("=== Learning Modes ==="))
-            fmt.print_menu_option(1, "Learn Mode", "Study RHCSA concepts with explanations & examples")
-            fmt.print_menu_option(2, "Guided Practice", "Practice with progressive hints & feedback")
-            fmt.print_menu_option(3, "Command Recall", "Build muscle memory by typing commands")
-            fmt.print_menu_option(4, "Flashcard Quiz", "Quick Q&A for rapid review [NEW]")
-            print()
-            print(fmt.dim("=== Testing Modes ==="))
-            fmt.print_menu_option(5, "Exam Mode", "Take a full mock RHCSA exam (15-20 tasks)")
-            fmt.print_menu_option(6, "Practice Mode", "Practice specific task categories")
-            fmt.print_menu_option(7, "Scenario Mode", "Multi-step real-world scenarios")
-            fmt.print_menu_option(8, "Troubleshooting", "Diagnose & fix broken systems")
-            print()
-            print(fmt.dim("=== Progress & Analytics ==="))
-            fmt.print_menu_option(9, "View Progress", "See your exam history and statistics")
-            fmt.print_menu_option(10, "Weak Areas", "Analyze weak spots & get recommendations")
-            fmt.print_menu_option(11, "Bookmarks", "Manage saved tasks for later")
-            fmt.print_menu_option(12, "Export Report", "Generate PDF/HTML progress report")
-            print()
-            print(fmt.dim("=== Help & Info ==="))
-            fmt.print_menu_option(13, "Task Statistics", "View available tasks by category")
-            fmt.print_menu_option(14, "Setup Practice Disks", "Create/manage loop devices for LVM practice")
-            fmt.print_menu_option(15, "Help", "How to use this simulator")
-            fmt.print_menu_option(0, "Exit", "Quit the simulator")
+            # Quick Start section
+            print(fmt.bold("QUICK START"))
+            fmt.print_menu_option('Q', "Quick Practice", "5 random tasks with auto-cleanup")
+            fmt.print_menu_option('E', "Mock Exam", "Full 15-task timed exam")
             print()
 
-            choice = input("Select an option: ").strip()
+            # Learning section
+            print(fmt.bold("LEARN"))
+            fmt.print_menu_option(1, "Guided Practice", "Practice with hints & feedback")
+            fmt.print_menu_option(2, "Learn Mode", "Study concepts with examples")
+            fmt.print_menu_option(3, "Command Recall", "Build muscle memory")
+            print()
 
-            if choice == '1':
-                return 'learn'
-            elif choice == '2':
+            # Practice section
+            print(fmt.bold("PRACTICE"))
+            fmt.print_menu_option(4, "Category Practice", "Practice specific topics")
+            fmt.print_menu_option(5, "Scenario Mode", "Multi-step challenges")
+            fmt.print_menu_option(6, "Troubleshooting", "Fix broken systems")
+            print()
+
+            # Progress section
+            print(fmt.bold("PROGRESS"))
+            fmt.print_menu_option(7, "Dashboard", "View stats & history")
+            fmt.print_menu_option(8, "Export Report", "Generate progress report")
+            print()
+
+            # Footer
+            print(fmt.dim("─" * 50))
+            device = self._get_device_info()
+            if device and device != "No practice device":
+                print(fmt.dim(f"  Practice Device: {device} (auto-cleanup enabled)"))
+            print(fmt.dim(f"  [S] Setup  [?] Help  [0] Exit"))
+            print()
+
+            choice = input("Select option: ").strip().lower()
+
+            # Quick access keys
+            if choice == 'q':
+                return 'quick_practice'
+            elif choice == 'e':
+                return 'exam'
+
+            # Learning options
+            elif choice == '1':
                 return 'guided_practice'
+            elif choice == '2':
+                return 'learn'
             elif choice == '3':
                 return 'command_recall'
+
+            # Practice options
             elif choice == '4':
-                return 'flashcard'
-            elif choice == '5':
-                return 'exam'
-            elif choice == '6':
                 return 'practice'
-            elif choice == '7':
+            elif choice == '5':
                 return 'scenario'
-            elif choice == '8':
+            elif choice == '6':
                 return 'troubleshoot'
-            elif choice == '9':
-                return 'progress'
-            elif choice == '10':
-                return 'weak_areas'
-            elif choice == '11':
-                return 'bookmarks'
-            elif choice == '12':
+
+            # Progress options
+            elif choice == '7':
+                return 'dashboard'
+            elif choice == '8':
                 return 'export'
-            elif choice == '13':
-                return 'stats'
-            elif choice == '14':
-                return 'setup_disks'
-            elif choice == '15':
+
+            # Utility options
+            elif choice == 's':
+                return 'setup'
+            elif choice == '?' or choice == 'h':
                 return 'help'
             elif choice == '0':
                 return 'exit'
+
             else:
                 print(fmt.error("Invalid selection."))
                 input("Press Enter to continue...")
@@ -91,101 +121,153 @@ class MenuSystem:
         """Print application header."""
         fmt.print_header(f"{settings.APP_NAME} v{settings.VERSION}")
 
+    def show_dashboard(self):
+        """Show unified progress dashboard."""
+        from core.results import get_results_manager
+        from core.bookmarks import get_weak_area_analyzer, get_bookmark_manager
+
+        fmt.clear_screen()
+        fmt.print_header("PROGRESS DASHBOARD")
+
+        results_mgr = get_results_manager()
+        analyzer = get_weak_area_analyzer()
+        bookmarks = get_bookmark_manager()
+
+        # Overall Stats
+        report = analyzer.get_summary_report()
+        print(fmt.bold("Overall Performance"))
+        print(f"  Total Attempts: {report['total_attempts']}")
+        print(f"  Success Rate: {report['overall_success_rate']*100:.1f}%")
+        print(f"  Categories Practiced: {report['categories_practiced']}")
+        print()
+
+        # Recent Exams
+        recent = results_mgr.get_recent_results(5)
+        if recent:
+            print(fmt.bold("Recent Exams"))
+            for r in recent:
+                status = fmt.success("PASS") if r.passed else fmt.error("FAIL")
+                print(f"  {r.end_time[:10]} - {r.percentage:.0f}% {status}")
+            print()
+
+        # Weak Areas
+        if report['weak_categories']:
+            print(fmt.bold("Areas to Improve"))
+            for cat in report['weak_categories'][:3]:
+                print(f"  - {fmt.format_category_name(cat['category'])}: {cat['score_rate']*100:.0f}%")
+            print()
+
+        # Bookmarks
+        bm_list = bookmarks.get_all()
+        if bm_list:
+            print(fmt.bold(f"Bookmarked Tasks ({len(bm_list)})"))
+            for bm in bm_list[:3]:
+                print(f"  - {bm.task_id}")
+            print()
+
+        print(fmt.dim("Options: [W] Weak areas  [B] Bookmarks  [Enter] Return"))
+        choice = input().strip().lower()
+
+        if choice == 'w':
+            self.show_weak_areas()
+        elif choice == 'b':
+            self.show_bookmarks()
+
     def show_help(self):
         """Display help information."""
         fmt.clear_screen()
         fmt.print_header("HELP")
 
         help_text = """
-RHCSA Mock Exam Simulator - How to Use
+RHCSA Simulator v2.0.0 - Quick Guide
 
-=== LEARNING MODES ===
+QUICK START
+  Q - Quick Practice: 5 random tasks with auto-cleanup between each.
+      Perfect for daily practice sessions.
 
-1. LEARN MODE
-   - Study RHCSA concepts with detailed explanations
-   - See command syntax, examples, and common flags
-   - Learn common mistakes to avoid
-   - Review exam-specific tricks and tips
-   - Best for: First-time learners, reviewing unfamiliar topics
+  E - Mock Exam: Full 15-task exam simulation with timer.
+      Tests all RHCSA objectives.
 
-2. GUIDED PRACTICE
-   - Practice tasks with progressive 3-level hints
-   - Level 1: Concept reminder
-   - Level 2: Command structure and syntax
-   - Level 3: Full solution with examples
-   - Get adaptive feedback explaining failures
-   - Best for: Building confidence, learning proper approach
+LEARNING MODES
+  1. Guided Practice - Practice with 3-level progressive hints
+  2. Learn Mode - Study concepts with explanations & examples
+  3. Command Recall - Type commands to build muscle memory
 
-3. COMMAND RECALL TRAINING
-   - Build muscle memory by typing commands
-   - Type the command before running it on your system
-   - Get instant feedback on command accuracy
-   - Track your command recall accuracy
-   - Best for: Memorizing commands, building speed
+PRACTICE MODES
+  4. Category Practice - Focus on specific topics (LVM, users, etc.)
+  5. Scenario Mode - Multi-step real-world challenges
+  6. Troubleshooting - Diagnose and fix broken systems
 
-=== TESTING MODES ===
+PROGRESS
+  7. Dashboard - View your stats, history, and weak areas
+  8. Export Report - Generate PDF/HTML progress report
 
-4. EXAM MODE
-   - Simulates a real RHCSA exam with 15-20 tasks
-   - Tasks cover all RHCSA objectives
-   - Optional 2.5-hour timer
-   - Complete tasks on your Linux system
-   - Return to validate your work
-   - Results are saved and tracked over time
+AUTO-CLEANUP (NEW in v2.0.0!)
+  Resources are automatically cleaned up between tasks.
+  No more manual disk wiping! The simulator handles:
+  - Unmounting filesystems
+  - Deactivating swap
+  - Removing LVM structures (LVs, VGs, PVs)
+  - Wiping device signatures
+  - Cleaning /etc/fstab entries
 
-5. PRACTICE MODE
-   - Practice specific categories without hints
-   - Choose difficulty level (easy/exam/hard)
-   - Get immediate pass/fail feedback
-   - Test your knowledge without assistance
+SETUP
+  Press 'S' to configure practice devices and options.
 
-=== PROGRESS & HELP ===
+TIPS
+  - Run as root (sudo) for full functionality
+  - Practice daily for best results
+  - Use bookmarks to save difficult tasks
 
-6. VIEW PROGRESS
-   - See your exam history
-   - Track score trends over time
-   - View pass rates and statistics
-
-7. TASK STATISTICS
-   - See all available tasks by category
-   - Check task counts and coverage
-
-=== IMPORTANT NOTES ===
-
-- You must run this as root (sudo)
-- This tool VALIDATES your work - it doesn't make changes
-- All validation commands are read-only and safe
-- Complete tasks on your actual Linux system
-- You can validate multiple times during an exam
-
-=== RECOMMENDED LEARNING PATH ===
-
-1. Start with LEARN MODE for each topic
-2. Practice with GUIDED PRACTICE (use hints as needed)
-3. Build speed with COMMAND RECALL TRAINING
-4. Test yourself with PRACTICE MODE (no hints)
-5. Take full EXAM MODE when confident
-
-=== CATEGORIES COVERED ===
-
-- Users & Groups Management
-- File Permissions & ACLs
-- LVM (Logical Volume Management)
-- File Systems
-- Networking
-- SELinux
-- Services (systemd)
-- Boot Targets
-- Process Management
-- Task Scheduling
-- Containers (Podman)
-- Essential Tools
-
-For more information, visit: https://www.redhat.com/rhcsa
+For detailed RHCSA exam info: https://www.redhat.com/rhcsa
         """
 
         print(help_text)
         input("\nPress Enter to return to menu...")
+
+    def show_setup(self):
+        """Show setup and configuration options."""
+        from device import get_device_manager
+
+        fmt.clear_screen()
+        fmt.print_header("SETUP")
+
+        dm = get_device_manager()
+        device = dm.get_practice_device()
+
+        print(fmt.bold("Current Configuration"))
+        print(f"  Practice Device: {device or 'Not detected'}")
+        print(f"  Auto-Cleanup: {'Enabled' if dm._cleanup_enabled else 'Disabled'}")
+        print()
+
+        print(fmt.bold("Options"))
+        print("  1. Setup Practice Disks")
+        print("  2. Toggle Auto-Cleanup")
+        print("  3. View Task Statistics")
+        print("  4. Refresh Device Detection")
+        print("  0. Return to Menu")
+        print()
+
+        choice = input("Select option: ").strip()
+
+        if choice == '1':
+            self.setup_practice_disks()
+        elif choice == '2':
+            if dm._cleanup_enabled:
+                dm.disable_cleanup()
+                print(fmt.warning("Auto-cleanup disabled"))
+            else:
+                dm.enable_cleanup()
+                print(fmt.success("Auto-cleanup enabled"))
+            input("Press Enter to continue...")
+        elif choice == '3':
+            self.show_stats()
+        elif choice == '4':
+            dm._practice_device = None
+            dm._detect_practice_device()
+            new_device = dm.get_practice_device()
+            print(fmt.info(f"Practice device: {new_device or 'None detected'}"))
+            input("Press Enter to continue...")
 
     def show_stats(self):
         """Show task statistics."""
@@ -201,7 +283,7 @@ For more information, visit: https://www.redhat.com/rhcsa
         TaskRegistry.print_statistics()
 
         print()
-        input("Press Enter to return to menu...")
+        input("Press Enter to return...")
 
     def show_weak_areas(self):
         """Show weak areas analysis and recommendations."""
@@ -237,7 +319,7 @@ For more information, visit: https://www.redhat.com/rhcsa
                 fmt.print_recommendation_card(rec)
 
         print()
-        input("Press Enter to return to menu...")
+        input("Press Enter to return...")
 
     def show_bookmarks(self):
         """Show and manage bookmarks."""
@@ -281,7 +363,7 @@ For more information, visit: https://www.redhat.com/rhcsa
                     print(fmt.success("Bookmarks cleared."))
 
         print()
-        input("Press Enter to return to menu...")
+        input("Press Enter to return...")
 
     def export_report(self):
         """Export progress report."""
@@ -298,12 +380,12 @@ For more information, visit: https://www.redhat.com/rhcsa
         print("  1. Text file (.txt)")
         print("  2. HTML file (.html)")
         print("  3. PDF file (.pdf) - requires reportlab")
-        print("  4. Cancel")
+        print("  0. Cancel")
         print()
 
-        choice = input("Select format [1-4]: ").strip()
+        choice = input("Select format [1-3]: ").strip()
 
-        if choice == '4':
+        if choice == '0':
             return
 
         format_map = {'1': 'text', '2': 'html', '3': 'pdf'}
@@ -337,7 +419,7 @@ For more information, visit: https://www.redhat.com/rhcsa
             print(fmt.error(f"Error generating report: {e}"))
 
         print()
-        input("Press Enter to return to menu...")
+        input("Press Enter to return...")
 
     def setup_practice_disks(self):
         """Set up or manage practice loop devices for LVM."""
@@ -373,7 +455,7 @@ For more information, visit: https://www.redhat.com/rhcsa
         print("  1. Create practice disks (2 x 500MB)")
         print("  2. Create custom practice disks")
         print("  3. Clean up all practice disks")
-        print("  4. Return to menu")
+        print("  0. Return to menu")
         print()
 
         choice = input("Select option [1]: ").strip() or '1'
@@ -417,4 +499,4 @@ For more information, visit: https://www.redhat.com/rhcsa
                     print(fmt.error("Cleanup failed"))
 
         print()
-        input("Press Enter to return to menu...")
+        input("Press Enter to return...")

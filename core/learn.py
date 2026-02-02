@@ -1076,7 +1076,15 @@ class LearnMode:
                 input("Press Enter to continue...")
 
 
-def run_learn_mode():
-    """Run learn mode (convenience function)."""
+def run_learn_mode(category=None):
+    """Run learn mode (convenience function).
+
+    Args:
+        category: Optional category to jump directly to
+    """
     mode = LearnMode()
-    mode.start()
+    if category:
+        mode.category = category
+        mode._show_topic_menu()
+    else:
+        mode.start()

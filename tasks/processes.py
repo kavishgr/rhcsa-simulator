@@ -45,9 +45,9 @@ class KillProcessTask(BaseTask):
             f"Kill by name: pkill {self.process_name}",
             f"Or: killall {self.process_name}",
             f"With specific signal: pkill -{self.signal} {self.process_name}",
-            "Find PID first: pgrep {process} or ps aux | grep {process}",
+            f"Find PID first: pgrep {self.process_name} or ps aux | grep {self.process_name}",
             "Then kill: kill <PID>",
-            "Verify: pgrep {process} (should return nothing)"
+            f"Verify: pgrep {self.process_name} (should return nothing)"
         ]
 
         return self
@@ -112,8 +112,8 @@ class AdjustProcessPriorityTask(BaseTask):
         self.hints = [
             f"Find PIDs: pgrep {self.process_name}",
             f"Renice: renice {self.nice_value} -p <PID>",
-            "For all instances: renice {nice} $(pgrep {process})",
-            "Verify: ps -eo pid,ni,comm | grep {process}",
+            f"For all instances: renice {self.nice_value} $(pgrep {self.process_name})",
+            f"Verify: ps -eo pid,ni,comm | grep {self.process_name}",
             "Negative nice values require root (higher priority)",
             "Positive nice values mean lower priority"
         ]
@@ -218,8 +218,8 @@ class StartProcessWithPriorityTask(BaseTask):
 
         self.hints = [
             f"Start with nice: nice -n {self.nice_value} {self.command} &",
-            "Verify: ps -eo pid,ni,comm | grep {process}",
-            "Check: pgrep {process} should show the PID",
+            f"Verify: ps -eo pid,ni,comm | grep {self.process_name}",
+            f"Check: pgrep {self.process_name} should show the PID",
             "The & at the end runs it in background"
         ]
 
@@ -328,8 +328,8 @@ class FindProcessByUserTask(BaseTask):
             f"List user processes: ps -u {self.username}",
             f"Kill user processes: pkill -u {self.username}",
             f"Or: killall -u {self.username}",
-            "Find PIDs: pgrep -u {username}",
-            "Verify: ps -u {username} (should show nothing if killed)"
+            f"Find PIDs: pgrep -u {self.username}",
+            f"Verify: ps -u {self.username} (should show nothing if killed)"
         ]
 
         return self
@@ -382,4 +382,201 @@ class FindProcessByUserTask(BaseTask):
                 ))
 
         passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("processes")
+class BackgroundProcessTask(BaseTask):
+    """Run a process in the background."""
+
+    def __init__(self):
+        super().__init__(
+            id="process_background_001",
+            category="processes",
+            difficulty="medium",
+            points=8
+        )
+        self.command = None
+        self.output_file = None
+
+    def generate(self, **params):
+        self.command = params.get('command', 'sleep 300')
+        self.output_file = params.get('output', '/tmp/bg_process.pid')
+
+        self.description = (
+            f"Run a process in the background:\n"
+            f"  - Command: {self.command}\n"
+            f"  - Run in background (don't block terminal)\n"
+            f"  - Save the process ID to: {self.output_file}\n"
+            f"  - Process should continue running"
+        )
+
+        self.hints = [
+            f"Run in background: {self.command} &",
+            f"Get last background PID: echo $! > {self.output_file}",
+            f"Or: nohup {self.command} & echo $! > {self.output_file}",
+            "List background jobs: jobs",
+            "Verify process: ps -p $(cat /tmp/bg_process.pid)"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check 1: PID file exists (3 points)
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="pid_file_exists",
+                passed=True,
+                points=3,
+                message=f"PID file exists"
+            ))
+            total_points += 3
+
+            # Check 2: PID is valid and process running (5 points)
+            try:
+                with open(self.output_file, 'r') as f:
+                    pid = f.read().strip()
+                    if pid.isdigit():
+                        result = execute_safe(['ps', '-p', pid])
+                        if result.success and pid in result.stdout:
+                            checks.append(ValidationCheck(
+                                name="process_running",
+                                passed=True,
+                                points=5,
+                                message=f"Process {pid} is running"
+                            ))
+                            total_points += 5
+                        else:
+                            checks.append(ValidationCheck(
+                                name="process_running",
+                                passed=False,
+                                points=0,
+                                max_points=5,
+                                message=f"Process {pid} is not running"
+                            ))
+                    else:
+                        checks.append(ValidationCheck(
+                            name="process_running",
+                            passed=False,
+                            points=0,
+                            max_points=5,
+                            message=f"Invalid PID in file"
+                        ))
+            except Exception:
+                checks.append(ValidationCheck(
+                    name="process_running",
+                    passed=False,
+                    points=0,
+                    max_points=5,
+                    message=f"Could not read PID file"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="pid_file_exists",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"PID file not found"
+            ))
+
+        passed = total_points >= (self.points * 0.6)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("processes")
+class FindResourceHogTask(BaseTask):
+    """Find processes using the most resources."""
+
+    def __init__(self):
+        super().__init__(
+            id="process_resource_001",
+            category="processes",
+            difficulty="medium",
+            points=8
+        )
+        self.resource_type = None
+        self.output_file = None
+
+    def generate(self, **params):
+        self.resource_type = params.get('resource', random.choice(['cpu', 'memory']))
+        self.output_file = params.get('output', f'/tmp/top_{self.resource_type}.txt')
+
+        if self.resource_type == 'cpu':
+            sort_key = 'CPU usage'
+            ps_sort = '-pcpu'
+        else:
+            sort_key = 'memory usage'
+            ps_sort = '-pmem'
+
+        self.description = (
+            f"Find top processes by {self.resource_type}:\n"
+            f"  - List top 10 processes by {sort_key}\n"
+            f"  - Save the output to: {self.output_file}\n"
+            f"  - Include PID, user, and command"
+        )
+
+        self.hints = [
+            f"Using ps: ps aux --sort={ps_sort} | head -11 > {self.output_file}",
+            "Or use top in batch mode: top -b -n 1 | head -20",
+            f"ps columns: -o pid,user,%cpu,%mem,comm",
+            "Sort by CPU: --sort=-%cpu, by memory: --sort=-%mem"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: Output file exists and has content
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=True,
+                points=4,
+                message=f"Output file exists"
+            ))
+            total_points += 4
+
+            try:
+                with open(self.output_file, 'r') as f:
+                    content = f.read()
+                    lines = content.strip().split('\n')
+                    if len(lines) >= 5:  # At least header + some processes
+                        checks.append(ValidationCheck(
+                            name="has_processes",
+                            passed=True,
+                            points=4,
+                            message=f"File contains process list ({len(lines)} lines)"
+                        ))
+                        total_points += 4
+                    else:
+                        checks.append(ValidationCheck(
+                            name="has_processes",
+                            passed=False,
+                            points=0,
+                            max_points=4,
+                            message=f"File has insufficient content"
+                        ))
+            except Exception:
+                checks.append(ValidationCheck(
+                    name="has_processes",
+                    passed=False,
+                    points=0,
+                    max_points=4,
+                    message=f"Could not read file"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Output file not found"
+            ))
+
+        passed = total_points >= (self.points * 0.6)
         return ValidationResult(self.id, passed, total_points, self.points, checks)

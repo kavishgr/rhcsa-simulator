@@ -258,8 +258,8 @@ class CreateArchiveTask(BaseTask):
             f"Create archive: tar -c{comp_flag}f {self.archive_path} {self.source_path}",
             "c = create, z = gzip, j = bzip2, J = xz, f = file",
             f"Example: tar -czf {self.archive_path} {self.source_path}",
-            "List contents: tar -tf {archive}",
-            "Extract: tar -xf {archive}"
+            f"List contents: tar -tf {self.archive_path}",
+            f"Extract: tar -xf {self.archive_path}"
         ]
 
         return self
@@ -371,7 +371,7 @@ class ExtractArchiveTask(BaseTask):
             f"Extract: tar -xf {self.archive_path} -C {self.extract_path}",
             "-x = extract, -C specifies destination directory",
             "Auto-detects compression type",
-            "List before extracting: tar -tf {archive}"
+            f"List before extracting: tar -tf {self.archive_path}"
         ]
 
         return self
@@ -1005,4 +1005,282 @@ class CopyPreserveTask(BaseTask):
             ))
 
         passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("essential_tools")
+class SortFileTask(BaseTask):
+    """Sort file contents and save to output."""
+
+    def __init__(self):
+        super().__init__(
+            id="tools_sort_001",
+            category="essential_tools",
+            difficulty="easy",
+            points=6
+        )
+        self.source_file = None
+        self.output_file = None
+        self.reverse = False
+
+    def generate(self, **params):
+        self.source_file = params.get('source', '/etc/passwd')
+        self.output_file = params.get('output', '/tmp/sorted_output.txt')
+        self.reverse = params.get('reverse', random.choice([True, False]))
+
+        sort_order = "reverse alphabetically" if self.reverse else "alphabetically"
+
+        self.description = (
+            f"Sort file contents:\n"
+            f"  - Source file: {self.source_file}\n"
+            f"  - Sort order: {sort_order}\n"
+            f"  - Save to: {self.output_file}"
+        )
+
+        if self.reverse:
+            self.hints = [
+                f"Sort in reverse: sort -r {self.source_file} > {self.output_file}",
+                "-r reverses the sort order",
+                "Verify: head {self.output_file}"
+            ]
+        else:
+            self.hints = [
+                f"Sort: sort {self.source_file} > {self.output_file}",
+                "Default sort is alphabetical, ascending",
+                f"Verify: head {self.output_file}"
+            ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=True,
+                points=3,
+                message=f"Output file exists"
+            ))
+            total_points += 3
+
+            try:
+                with open(self.output_file, 'r') as f:
+                    lines = f.readlines()
+                    if len(lines) > 1:
+                        # Check if sorted
+                        sorted_lines = sorted(lines, reverse=self.reverse)
+                        if lines == sorted_lines:
+                            checks.append(ValidationCheck(
+                                name="correctly_sorted",
+                                passed=True,
+                                points=3,
+                                message=f"File is correctly sorted"
+                            ))
+                            total_points += 3
+                        else:
+                            checks.append(ValidationCheck(
+                                name="correctly_sorted",
+                                passed=False,
+                                points=0,
+                                max_points=3,
+                                message=f"File is not sorted correctly"
+                            ))
+                    else:
+                        checks.append(ValidationCheck(
+                            name="correctly_sorted",
+                            passed=True,
+                            points=2,
+                            message=f"File has content (partial credit)"
+                        ))
+                        total_points += 2
+            except Exception:
+                checks.append(ValidationCheck(
+                    name="correctly_sorted",
+                    passed=False,
+                    points=0,
+                    max_points=3,
+                    message=f"Could not verify sorting"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Output file not found"
+            ))
+
+        passed = total_points >= (self.points * 0.6)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("essential_tools")
+class CutFieldsTask(BaseTask):
+    """Extract specific fields from a file using cut."""
+
+    def __init__(self):
+        super().__init__(
+            id="tools_cut_001",
+            category="essential_tools",
+            difficulty="medium",
+            points=8
+        )
+        self.source_file = None
+        self.output_file = None
+        self.field = None
+        self.delimiter = None
+
+    def generate(self, **params):
+        self.source_file = params.get('source', '/etc/passwd')
+        self.output_file = params.get('output', '/tmp/extracted_field.txt')
+        self.field = params.get('field', random.choice([1, 3, 7]))
+        self.delimiter = params.get('delimiter', ':')
+
+        field_names = {1: 'username', 3: 'UID', 7: 'shell'}
+        field_name = field_names.get(self.field, f'field {self.field}')
+
+        self.description = (
+            f"Extract a field from a file:\n"
+            f"  - Source file: {self.source_file}\n"
+            f"  - Extract: {field_name} (field {self.field})\n"
+            f"  - Delimiter: '{self.delimiter}'\n"
+            f"  - Save to: {self.output_file}"
+        )
+
+        self.hints = [
+            f"Use cut: cut -d'{self.delimiter}' -f{self.field} {self.source_file} > {self.output_file}",
+            "-d specifies delimiter, -f specifies field number",
+            f"Field numbering starts at 1",
+            f"Verify: head {self.output_file}"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=True,
+                points=4,
+                message=f"Output file exists"
+            ))
+            total_points += 4
+
+            try:
+                with open(self.output_file, 'r') as f:
+                    content = f.read().strip()
+                    if content:
+                        checks.append(ValidationCheck(
+                            name="has_content",
+                            passed=True,
+                            points=4,
+                            message=f"File contains extracted fields"
+                        ))
+                        total_points += 4
+                    else:
+                        checks.append(ValidationCheck(
+                            name="has_content",
+                            passed=False,
+                            points=0,
+                            max_points=4,
+                            message=f"File is empty"
+                        ))
+            except Exception:
+                checks.append(ValidationCheck(
+                    name="has_content",
+                    passed=False,
+                    points=0,
+                    max_points=4,
+                    message=f"Could not read file"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Output file not found"
+            ))
+
+        passed = total_points >= (self.points * 0.6)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("essential_tools")
+class DiffFilesTask(BaseTask):
+    """Compare two files using diff."""
+
+    def __init__(self):
+        super().__init__(
+            id="tools_diff_001",
+            category="essential_tools",
+            difficulty="medium",
+            points=8
+        )
+        self.file1 = None
+        self.file2 = None
+        self.output_file = None
+
+    def generate(self, **params):
+        self.file1 = params.get('file1', '/etc/passwd')
+        self.file2 = params.get('file2', '/etc/passwd-')
+        self.output_file = params.get('output', '/tmp/diff_output.txt')
+
+        self.description = (
+            f"Compare two files:\n"
+            f"  - File 1: {self.file1}\n"
+            f"  - File 2: {self.file2}\n"
+            f"  - Save differences to: {self.output_file}\n"
+            f"  - Show what changed between files"
+        )
+
+        self.hints = [
+            f"Compare files: diff {self.file1} {self.file2} > {self.output_file}",
+            "diff shows lines that differ between files",
+            "< indicates lines only in first file",
+            "> indicates lines only in second file",
+            f"Unified format: diff -u {self.file1} {self.file2}"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: Output file exists
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=True,
+                points=8,
+                message=f"Diff output file created"
+            ))
+            total_points += 8
+        else:
+            # Could be empty if files are identical
+            import os
+            if os.path.exists(self.output_file):
+                checks.append(ValidationCheck(
+                    name="output_exists",
+                    passed=True,
+                    points=6,
+                    message=f"Diff file created (may be empty if files identical)"
+                ))
+                total_points += 6
+            else:
+                checks.append(ValidationCheck(
+                    name="output_exists",
+                    passed=False,
+                    points=0,
+                    max_points=8,
+                    message=f"Output file not found"
+                ))
+
+        passed = total_points >= (self.points * 0.6)
         return ValidationResult(self.id, passed, total_points, self.points, checks)

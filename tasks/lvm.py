@@ -444,3 +444,187 @@ class LVMFullWorkflowTask(BaseTask):
 
         passed = total_points >= (self.points * 0.7)
         return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("lvm")
+class ExtendVGTask(BaseTask):
+    """Extend a volume group by adding a new physical volume."""
+
+    def __init__(self):
+        super().__init__(
+            id="lvm_vg_extend_001",
+            category="lvm",
+            difficulty="exam",
+            points=10
+        )
+        self.vg_name = None
+        self.new_device = None
+
+    def generate(self, **params):
+        existing_vg = get_practice_vg()
+        self.vg_name = params.get('vg_name', existing_vg or 'vg_practice')
+
+        # Get a secondary device if available
+        devices = get_all_practice_devices()
+        if len(devices) > 1:
+            self.new_device = devices[1]
+        else:
+            self.new_device = params.get('device', '/dev/vdc')
+
+        self.description = (
+            f"Extend a volume group:\n"
+            f"  - Volume group: {self.vg_name}\n"
+            f"  - Add new device: {self.new_device}\n"
+            f"  - Create PV on the new device first\n"
+            f"  - Verify VG has increased in size"
+        )
+
+        self.hints = [
+            f"Create PV on new device: pvcreate {self.new_device}",
+            f"Extend VG: vgextend {self.vg_name} {self.new_device}",
+            f"Verify: vgs {self.vg_name}",
+            "Check VG size before and after with 'vgs'",
+            "New PV must exist before extending VG"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        from validators.safe_executor import execute_safe
+
+        # Check 1: PV exists on new device (4 points)
+        result = execute_safe(['pvs', '--noheadings', self.new_device])
+        if result.success and result.stdout.strip():
+            checks.append(ValidationCheck("pv_exists", True, 4, f"PV created on {self.new_device}"))
+            total_points += 4
+        else:
+            checks.append(ValidationCheck("pv_exists", False, 0, f"PV not found on {self.new_device}", max_points=4))
+
+        # Check 2: PV is part of VG (6 points)
+        result = execute_safe(['pvs', '--noheadings', '-o', 'vg_name', self.new_device])
+        if result.success and self.vg_name in result.stdout:
+            checks.append(ValidationCheck("pv_in_vg", True, 6, f"Device added to {self.vg_name}"))
+            total_points += 6
+        else:
+            checks.append(ValidationCheck("pv_in_vg", False, 0, f"Device not part of {self.vg_name}", max_points=6))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("lvm")
+class RemoveLVTask(BaseTask):
+    """Remove a logical volume safely."""
+
+    def __init__(self):
+        super().__init__(
+            id="lvm_lv_remove_001",
+            category="lvm",
+            difficulty="medium",
+            points=8
+        )
+        self.vg_name = None
+        self.lv_name = None
+
+    def generate(self, **params):
+        self.vg_name = params.get('vg_name', f'vg_test{random.randint(1,99)}')
+        self.lv_name = params.get('lv_name', f'lv_remove{random.randint(1,99)}')
+
+        self.description = (
+            f"Remove a logical volume:\n"
+            f"  - Volume group: {self.vg_name}\n"
+            f"  - Logical volume to remove: {self.lv_name}\n"
+            f"  - Ensure LV is unmounted first\n"
+            f"  - Remove the fstab entry if exists\n"
+            f"  - Safely remove the logical volume"
+        )
+
+        self.hints = [
+            f"Unmount first: umount /dev/{self.vg_name}/{self.lv_name}",
+            "Edit /etc/fstab to remove any entry for this LV",
+            f"Remove LV: lvremove /dev/{self.vg_name}/{self.lv_name}",
+            "Use -f flag to force removal: lvremove -f ...",
+            "Verify removal: lvs"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: LV should NOT exist
+        if not validate_lv_exists(self.vg_name, self.lv_name):
+            checks.append(ValidationCheck("lv_removed", True, 8, f"Logical volume successfully removed"))
+            total_points += 8
+        else:
+            checks.append(ValidationCheck("lv_removed", False, 0, f"Logical volume still exists", max_points=8))
+
+        passed = total_points >= (self.points * 0.8)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("lvm")
+class ReduceLVTask(BaseTask):
+    """Reduce a logical volume (ext4 only - XFS cannot shrink)."""
+
+    def __init__(self):
+        super().__init__(
+            id="lvm_lv_reduce_001",
+            category="lvm",
+            difficulty="hard",
+            points=15
+        )
+        self.vg_name = None
+        self.lv_name = None
+        self.new_size_mb = None
+
+    def generate(self, **params):
+        existing_vg, existing_lv = get_practice_lv()
+        self.vg_name = params.get('vg_name', existing_vg or 'vg_practice')
+        self.lv_name = params.get('lv_name', existing_lv or 'lv_practice')
+        self.new_size_mb = params.get('new_size', random.choice([500, 750, 1000]))
+
+        self.description = (
+            f"Reduce a logical volume:\n"
+            f"  - Volume group: {self.vg_name}\n"
+            f"  - Logical volume: {self.lv_name}\n"
+            f"  - Reduce to: {self.new_size_mb}MB\n"
+            f"  - NOTE: Filesystem must be ext4 (XFS cannot shrink)\n"
+            f"  - Unmount, resize filesystem, then reduce LV\n"
+            f"  - Remount after completion"
+        )
+
+        self.hints = [
+            f"Unmount: umount /dev/{self.vg_name}/{self.lv_name}",
+            f"Check filesystem: e2fsck -f /dev/{self.vg_name}/{self.lv_name}",
+            f"Resize filesystem first: resize2fs /dev/{self.vg_name}/{self.lv_name} {self.new_size_mb}M",
+            f"Then reduce LV: lvreduce -L {self.new_size_mb}M /dev/{self.vg_name}/{self.lv_name}",
+            "WARNING: Always resize filesystem BEFORE reducing LV!",
+            "XFS cannot be shrunk - only ext4/ext3 support this"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        if validate_lv_exists(self.vg_name, self.lv_name):
+            checks.append(ValidationCheck("lv_exists", True, 5, f"LV exists"))
+            total_points += 5
+
+            actual_size = get_lv_size_mb(self.vg_name, self.lv_name)
+            tolerance = self.new_size_mb * 0.1
+            if actual_size and abs(actual_size - self.new_size_mb) <= tolerance:
+                checks.append(ValidationCheck("lv_reduced", True, 10, f"LV reduced to ~{actual_size}MB"))
+                total_points += 10
+            else:
+                checks.append(ValidationCheck("lv_reduced", False, 0, f"LV size is {actual_size}MB (expected {self.new_size_mb}MB)", max_points=10))
+        else:
+            checks.append(ValidationCheck("lv_exists", False, 0, f"LV not found", max_points=5))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)

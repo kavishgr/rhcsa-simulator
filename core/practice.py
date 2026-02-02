@@ -1,5 +1,7 @@
 """
-Practice mode for RHCSA Simulator.
+Practice mode for RHCSA Simulator v2.0.0
+
+Features auto-cleanup between tasks via DeviceManager.
 """
 
 import logging
@@ -8,6 +10,7 @@ from core.validator import get_validator
 from utils import formatters as fmt
 from utils.helpers import confirm_action
 from config import settings
+from device import get_device_manager
 
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,13 @@ class PracticeSession:
             print(fmt.error(f"No tasks available for {self.category}"))
             return
 
+        # Show cleanup status
+        device_manager = get_device_manager()
+        device = device_manager.get_practice_device()
+        if device:
+            print(fmt.info(f"\nAuto-cleanup enabled on {device}"))
+            print(fmt.dim("Resources will be cleaned between tasks automatically."))
+
         # Practice each task
         try:
             for i, task in enumerate(tasks, 1):
@@ -58,6 +68,9 @@ class PracticeSession:
             print(fmt.success("\nPractice session complete!"))
         except StopIteration:
             print(fmt.info("\nPractice session ended early."))
+
+        # Final cleanup
+        device_manager.cleanup_all_resources(force=True)
 
     def _show_fix_suggestion(self, check, task):
         """Show specific suggestions for fixing failed checks."""
@@ -139,7 +152,15 @@ class PracticeSession:
                 print(fmt.error("Invalid selection"))
 
     def _practice_task(self, task, current, total):
-        """Practice a single task."""
+        """Practice a single task with automatic cleanup."""
+        device_manager = get_device_manager()
+
+        # Use task context for automatic cleanup
+        with device_manager.task_context(task.id, auto_cleanup=True):
+            self._run_practice_task(task, current, total)
+
+    def _run_practice_task(self, task, current, total):
+        """Run the actual practice task loop."""
         attempt = 1
 
         while True:

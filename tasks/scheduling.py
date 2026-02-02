@@ -170,7 +170,7 @@ class CreateSystemCronTask(BaseTask):
             f"Create file: /etc/cron.d/{self.job_name}",
             f"Format: {self.schedule} {self.user} {self.command}",
             "System cron format: min hour day month weekday user command",
-            "Permissions: chmod 644 /etc/cron.d/{job_name}",
+            f"Permissions: chmod 644 /etc/cron.d/{self.job_name}",
             "No need to restart cron service"
         ]
 
@@ -501,4 +501,132 @@ class CreateSystemdTimerTask(BaseTask):
             ))
 
         passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("scheduling")
+class ListCronJobsTask(BaseTask):
+    """List and save cron jobs for a user."""
+
+    def __init__(self):
+        super().__init__(
+            id="sched_list_cron_001",
+            category="scheduling",
+            difficulty="easy",
+            points=6
+        )
+        self.username = None
+        self.output_file = None
+
+    def generate(self, **params):
+        self.username = params.get('user', 'root')
+        self.output_file = params.get('output', '/tmp/cron_jobs.txt')
+
+        self.description = (
+            f"List cron jobs for a user:\n"
+            f"  - User: {self.username}\n"
+            f"  - Save all cron jobs to: {self.output_file}\n"
+            f"  - Include any system cron jobs if applicable"
+        )
+
+        self.hints = [
+            f"List user crontab: crontab -l -u {self.username}",
+            f"Save to file: crontab -l -u {self.username} > {self.output_file}",
+            "Also check: /etc/cron.d/, /etc/cron.daily/, etc.",
+            "System cron: /etc/crontab"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: Output file exists
+        if validate_file_exists(self.output_file):
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=True,
+                points=6,
+                message=f"Output file created"
+            ))
+            total_points += 6
+        else:
+            checks.append(ValidationCheck(
+                name="output_exists",
+                passed=False,
+                points=0,
+                max_points=6,
+                message=f"Output file not found"
+            ))
+
+        passed = total_points >= (self.points * 0.8)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("scheduling")
+class RemoveCronJobTask(BaseTask):
+    """Remove a specific cron job or all cron jobs for a user."""
+
+    def __init__(self):
+        super().__init__(
+            id="sched_remove_cron_001",
+            category="scheduling",
+            difficulty="medium",
+            points=8
+        )
+        self.username = None
+        self.remove_all = True
+
+    def generate(self, **params):
+        self.username = params.get('user', f'cronuser{random.randint(1,99)}')
+        self.remove_all = params.get('remove_all', True)
+
+        if self.remove_all:
+            self.description = (
+                f"Remove all cron jobs for a user:\n"
+                f"  - User: {self.username}\n"
+                f"  - Remove the user's entire crontab\n"
+                f"  - Verify no cron jobs remain"
+            )
+        else:
+            self.description = (
+                f"Edit cron jobs for a user:\n"
+                f"  - User: {self.username}\n"
+                f"  - Edit and remove unwanted cron entries"
+            )
+
+        self.hints = [
+            f"Remove all: crontab -r -u {self.username}",
+            f"Or edit: crontab -e -u {self.username}",
+            f"Verify: crontab -l -u {self.username}",
+            "Should show 'no crontab' after removal"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        # Check: User's crontab should be empty/removed
+        result = execute_safe(['crontab', '-l', '-u', self.username])
+        if not result.success or 'no crontab' in result.stderr.lower():
+            checks.append(ValidationCheck(
+                name="crontab_removed",
+                passed=True,
+                points=8,
+                message=f"Crontab removed for {self.username}"
+            ))
+            total_points += 8
+        else:
+            checks.append(ValidationCheck(
+                name="crontab_removed",
+                passed=False,
+                points=0,
+                max_points=8,
+                message=f"Crontab still exists for {self.username}"
+            ))
+
+        passed = total_points >= (self.points * 0.8)
         return ValidationResult(self.id, passed, total_points, self.points, checks)

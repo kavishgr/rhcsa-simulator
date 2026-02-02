@@ -122,7 +122,7 @@ class MountFilesystemTask(BaseTask):
         self.hints = [
             f"Create mount point: mkdir -p {self.mount_point}",
             f"Mount filesystem: mount {self.device} {self.mount_point}",
-            "Verify with 'mount | grep {mount_point}' or 'df -h'",
+            f"Verify with 'mount | grep {self.mount_point}' or 'df -h'",
             "Check with 'lsblk' to see mount points"
         ]
 
@@ -214,11 +214,11 @@ class PersistentMountTask(BaseTask):
         )
 
         self.hints = [
-            ff"Get UUID: blkid {self.device}",
+            f"Get UUID: blkid {self.device}",
             f"Create mount point: mkdir -p {self.mount_point}",
             "Edit /etc/fstab and add: UUID=<uuid> <mount_point> <fstype> <options> 0 0",
             "Mount all fstab entries: mount -a",
-            "Verify: mount | grep {mount_point}",
+            f"Verify: mount | grep {self.mount_point}",
             "Test fstab syntax: findmnt --verify"
         ]
 
@@ -546,4 +546,190 @@ class ExtendFilesystemTask(BaseTask):
             ))
 
         passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("filesystems")
+class CreateSwapFileTask(BaseTask):
+    """Create a swap file (not partition)."""
+
+    def __init__(self):
+        super().__init__(
+            id="fs_swapfile_001",
+            category="filesystems",
+            difficulty="exam",
+            points=12
+        )
+        self.swap_file = None
+        self.size_mb = None
+
+    def generate(self, **params):
+        self.swap_file = params.get('file', '/swapfile')
+        self.size_mb = params.get('size', random.choice([512, 1024, 2048]))
+
+        self.description = (
+            f"Create a swap file:\n"
+            f"  - File path: {self.swap_file}\n"
+            f"  - Size: {self.size_mb}MB\n"
+            f"  - Set correct permissions (600)\n"
+            f"  - Format as swap and activate\n"
+            f"  - Configure to activate at boot (/etc/fstab)"
+        )
+
+        self.hints = [
+            f"Create file: dd if=/dev/zero of={self.swap_file} bs=1M count={self.size_mb}",
+            f"Or use: fallocate -l {self.size_mb}M {self.swap_file}",
+            f"Set permissions: chmod 600 {self.swap_file}",
+            f"Format as swap: mkswap {self.swap_file}",
+            f"Activate: swapon {self.swap_file}",
+            f"Add to /etc/fstab: {self.swap_file} none swap defaults 0 0",
+            "Verify: swapon --show"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+        import os
+        import stat
+
+        # Check 1: Swap file exists (3 points)
+        if os.path.exists(self.swap_file):
+            checks.append(ValidationCheck(
+                name="file_exists",
+                passed=True,
+                points=3,
+                message=f"Swap file exists"
+            ))
+            total_points += 3
+
+            # Check 2: Correct permissions (2 points)
+            file_stat = os.stat(self.swap_file)
+            perms = stat.S_IMODE(file_stat.st_mode)
+            if perms == 0o600:
+                checks.append(ValidationCheck(
+                    name="permissions_correct",
+                    passed=True,
+                    points=2,
+                    message=f"Permissions are 600"
+                ))
+                total_points += 2
+            else:
+                checks.append(ValidationCheck(
+                    name="permissions_correct",
+                    passed=False,
+                    points=0,
+                    max_points=2,
+                    message=f"Permissions are {oct(perms)}, expected 0o600"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="file_exists",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Swap file not found"
+            ))
+            return ValidationResult(self.id, False, total_points, self.points, checks)
+
+        # Check 3: Swap is active (4 points)
+        if validate_swap_active(self.swap_file):
+            checks.append(ValidationCheck(
+                name="swap_active",
+                passed=True,
+                points=4,
+                message=f"Swap file is active"
+            ))
+            total_points += 4
+        else:
+            checks.append(ValidationCheck(
+                name="swap_active",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Swap file is not active"
+            ))
+
+        # Check 4: In /etc/fstab (3 points)
+        if validate_file_contains('/etc/fstab', self.swap_file):
+            checks.append(ValidationCheck(
+                name="fstab_entry",
+                passed=True,
+                points=3,
+                message=f"Entry in /etc/fstab"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="fstab_entry",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Not in /etc/fstab"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("filesystems")
+class UnmountFilesystemTask(BaseTask):
+    """Safely unmount a filesystem."""
+
+    def __init__(self):
+        super().__init__(
+            id="fs_unmount_001",
+            category="filesystems",
+            difficulty="easy",
+            points=6
+        )
+        self.mount_point = None
+
+    def generate(self, **params):
+        self.mount_point = params.get('mount_point', f'/mnt/data{random.randint(1,99)}')
+
+        self.description = (
+            f"Unmount a filesystem:\n"
+            f"  - Mount point: {self.mount_point}\n"
+            f"  - Ensure no processes are using the filesystem\n"
+            f"  - Safely unmount the filesystem\n"
+            f"  - Remove the mount point directory (optional)"
+        )
+
+        self.hints = [
+            f"Check for users: lsof {self.mount_point}",
+            f"Or: fuser -m {self.mount_point}",
+            f"Unmount: umount {self.mount_point}",
+            "If busy, use: umount -l (lazy unmount) as last resort",
+            f"Verify: mount | grep {self.mount_point}"
+        ]
+
+        return self
+
+    def validate(self):
+        checks = []
+        total_points = 0
+
+        mounts = get_mounted_devices()
+        is_mounted = any(m['mount_point'] == self.mount_point for m in mounts)
+
+        if not is_mounted:
+            checks.append(ValidationCheck(
+                name="unmounted",
+                passed=True,
+                points=6,
+                message=f"Filesystem successfully unmounted"
+            ))
+            total_points += 6
+        else:
+            checks.append(ValidationCheck(
+                name="unmounted",
+                passed=False,
+                points=0,
+                max_points=6,
+                message=f"Filesystem is still mounted at {self.mount_point}"
+            ))
+
+        passed = total_points >= (self.points * 0.8)
         return ValidationResult(self.id, passed, total_points, self.points, checks)

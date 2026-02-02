@@ -168,46 +168,78 @@ class CommandRecallSession:
 
         # Common command patterns for different categories
         command_patterns = {
-            'users_groups': [r'useradd', r'usermod', r'groupadd', r'gpasswd', r'passwd'],
-            'permissions': [r'chmod', r'chown', r'chgrp', r'setfacl', r'getfacl'],
-            'services': [r'systemctl\s+(start|stop|enable|disable|restart|status)'],
-            'selinux': [r'semanage\s+fcontext', r'restorecon', r'setsebool', r'getsebool', r'chcon'],
-            'lvm': [r'pvcreate', r'vgcreate', r'lvcreate', r'pvs', r'vgs', r'lvs'],
-            'filesystems': [r'mkfs', r'mount', r'umount', r'blkid', r'lsblk', r'mkswap', r'swapon', r'swapoff', r'xfs_growfs', r'resize2fs'],
-            'networking': [r'nmcli', r'ip\s+addr', r'ip\s+link', r'hostnamectl'],
+            'users_groups': [r'useradd', r'usermod', r'groupadd', r'gpasswd', r'passwd', r'userdel', r'groupdel', r'chage'],
+            'permissions': [r'chmod', r'chown', r'chgrp', r'setfacl', r'getfacl', r'umask'],
+            'services': [r'systemctl\s*(start|stop|enable|disable|restart|status|is-active|is-enabled)?', r'journalctl'],
+            'selinux': [r'semanage', r'restorecon', r'setsebool', r'getsebool', r'chcon', r'getenforce', r'setenforce'],
+            'lvm': [r'pvcreate', r'vgcreate', r'lvcreate', r'pvs', r'vgs', r'lvs', r'lvextend', r'vgextend', r'pvremove', r'vgremove', r'lvremove'],
+            'filesystems': [r'mkfs\.?\w*', r'mount', r'umount', r'blkid', r'lsblk', r'mkswap', r'swapon', r'swapoff', r'xfs_growfs', r'resize2fs', r'findmnt', r'df'],
+            'networking': [r'nmcli', r'ip\s+(addr|link|route)', r'hostnamectl', r'ss', r'ping', r'firewall-cmd'],
+            'boot': [r'systemctl\s+(set-default|get-default|isolate)', r'grub2?-mkconfig', r'dracut'],
+            'scheduling': [r'crontab', r'at\b', r'systemctl.*timer'],
+            'containers': [r'podman', r'docker', r'buildah', r'skopeo'],
+            'essential_tools': [r'tar', r'gzip', r'bzip2', r'xz', r'find', r'grep', r'sed', r'awk', r'vim?', r'ssh', r'scp', r'rsync'],
+            'processes': [r'ps', r'top', r'htop', r'kill', r'pkill', r'nice', r'renice', r'nohup', r'bg', r'fg', r'jobs'],
         }
 
         category_patterns = command_patterns.get(task.category, [])
 
         # Extract commands from hints
         for hint in task.hints:
+            # Skip hints that are just explanatory text (too long or no command indicators)
+            if len(hint) > 100 and ':' not in hint:
+                continue
+
+            # First, try to extract command after a colon (common format: "Description: command args")
+            if ':' in hint:
+                parts = hint.split(':', 1)
+                if len(parts) == 2:
+                    cmd_part = parts[1].strip()
+                    # Check if it looks like a command
+                    for pattern in category_patterns:
+                        if re.match(pattern, cmd_part.split()[0] if cmd_part.split() else '', re.IGNORECASE):
+                            commands.append(cmd_part.rstrip('.,;:'))
+                            break
+
+            # Try backtick extraction
+            backtick_match = re.search(r'`([^`]+)`', hint)
+            if backtick_match:
+                cmd = backtick_match.group(1)
+                if cmd not in commands:
+                    commands.append(cmd)
+                continue
+
             # Look for command-like patterns in hints
             for pattern in category_patterns:
                 if re.search(pattern, hint, re.IGNORECASE):
-                    # Try to extract the actual command
-                    match = re.search(r'`([^`]+)`', hint)
-                    if match:
-                        commands.append(match.group(1))
-                    else:
-                        # Extract command from pattern match
-                        words = hint.split()
-                        for i, word in enumerate(words):
-                            if re.match(pattern, word, re.IGNORECASE):
-                                # Get command and a few following words
-                                cmd = ' '.join(words[i:min(i+5, len(words))])
-                                commands.append(cmd.strip('.,;:'))
-                                break
+                    # Extract command starting from the pattern match
+                    words = hint.split()
+                    for i, word in enumerate(words):
+                        # Clean the word of common prefixes like numbers/bullets
+                        clean_word = re.sub(r'^[\d.)\-\*]+\s*', '', word)
+                        if re.match(pattern, clean_word, re.IGNORECASE):
+                            # Get command and following arguments (up to 6 words or until punctuation)
+                            cmd_words = [clean_word]
+                            for j in range(i+1, min(i+6, len(words))):
+                                next_word = words[j].rstrip('.,;:')
+                                # Stop at certain keywords
+                                if next_word.lower() in ['or', 'and', 'to', 'the', 'for', 'with']:
+                                    break
+                                cmd_words.append(next_word)
+                            cmd = ' '.join(cmd_words).strip('.,;:')
+                            if cmd and cmd not in commands:
+                                commands.append(cmd)
+                            break
 
-        # If no commands found, try to extract from any code-like patterns
-        if not commands:
-            for hint in task.hints:
-                # Look for common command patterns
-                if re.search(r'\b(sudo\s+)?[a-z]+\s+[/-]', hint):
-                    match = re.search(r'((?:sudo\s+)?[a-z]+\s+[^\s.]+(?:\s+[^\s.]+)*)', hint)
-                    if match:
-                        commands.append(match.group(1))
+        # Deduplicate while preserving order
+        seen = set()
+        unique_commands = []
+        for cmd in commands:
+            if cmd not in seen:
+                seen.add(cmd)
+                unique_commands.append(cmd)
 
-        return commands[:3]  # Limit to first 3 commands
+        return unique_commands[:5]  # Return up to 5 commands
 
     def _evaluate_commands(self, user_commands, expected_commands, task):
         """
@@ -302,29 +334,85 @@ class CommandRecallSession:
         if user_norm == expected_norm:
             return 1.0
 
-        # Check if base command matches
-        user_base = user_norm.split()[0]
-        expected_base = expected_norm.split()[0]
+        # Get base commands
+        user_parts = user_norm.split()
+        expected_parts = expected_norm.split()
 
-        if user_base != expected_base:
-            # Different base command - very low score
-            return SequenceMatcher(None, user_norm, expected_norm).ratio() * 0.3
+        if not user_parts or not expected_parts:
+            return 0.0
 
-        # Same base command - check arguments
-        base_score = 0.5  # 50% for matching base command
+        user_base = user_parts[0]
+        expected_base = expected_parts[0]
 
-        # Compare arguments
-        user_args = set(user_norm.split()[1:])
-        expected_args = set(expected_norm.split()[1:])
+        # Handle compound commands (e.g., mkfs.xfs vs mkfs)
+        user_base_root = user_base.split('.')[0]
+        expected_base_root = expected_base.split('.')[0]
 
-        if not expected_args:
-            arg_score = 0.5
+        # Check for base command match
+        base_match = False
+        if user_base == expected_base:
+            base_match = True
+            base_score = 0.6  # 60% for exact base match
+        elif user_base_root == expected_base_root:
+            base_match = True
+            base_score = 0.55  # 55% for root match (e.g., mkfs.xfs ~ mkfs.ext4)
+        elif user_base in expected_base or expected_base in user_base:
+            base_match = True
+            base_score = 0.5  # 50% for partial match
+
+        if not base_match:
+            # Check if commands are related (same category)
+            related_commands = {
+                'mkfs': ['mkfs.xfs', 'mkfs.ext4', 'mkfs.ext3'],
+                'mkswap': ['swapon', 'swapoff'],
+                'swapon': ['mkswap', 'swapoff'],
+                'mount': ['umount', 'findmnt'],
+                'systemctl': ['service', 'journalctl'],
+                'useradd': ['usermod', 'userdel'],
+                'groupadd': ['groupmod', 'groupdel'],
+                'pvcreate': ['vgcreate', 'lvcreate'],
+                'lvextend': ['lvresize', 'vgextend'],
+            }
+
+            related = related_commands.get(user_base, [])
+            if expected_base in related or expected_base_root in related:
+                base_score = 0.4  # 40% for related command
+            else:
+                # Completely different command - use sequence matching
+                return SequenceMatcher(None, user_norm, expected_norm).ratio() * 0.3
+
+        # Compare arguments (paths, flags, values)
+        user_args = set(user_parts[1:])
+        expected_args = set(expected_parts[1:])
+
+        if not expected_args and not user_args:
+            arg_score = 0.4  # Both have no args
+        elif not expected_args:
+            arg_score = 0.3  # User has args but expected doesn't
         else:
+            # Calculate argument overlap
             common_args = user_args & expected_args
-            arg_score = len(common_args) / len(expected_args)
+
+            # Also check for partial path matches (e.g., /dev/sdd matches /dev/sdc)
+            partial_matches = 0
+            for u_arg in user_args:
+                for e_arg in expected_args:
+                    if u_arg not in common_args and e_arg not in common_args:
+                        # Check for partial match (same prefix)
+                        if u_arg.startswith('/dev/') and e_arg.startswith('/dev/'):
+                            partial_matches += 0.5
+                        elif u_arg.startswith('/mnt/') and e_arg.startswith('/mnt/'):
+                            partial_matches += 0.5
+                        elif u_arg.startswith('-') and e_arg.startswith('-'):
+                            # Same type of flag
+                            if u_arg[1:2] == e_arg[1:2]:  # Same first letter
+                                partial_matches += 0.3
+
+            total_matches = len(common_args) + partial_matches
+            arg_score = min(1.0, total_matches / len(expected_args)) * 0.4
 
         # Combined score
-        return base_score + (arg_score * 0.5)
+        return base_score + arg_score
 
     def _explain_command_difference(self, user_cmd, expected_cmd):
         """Explain the difference between user and expected command."""

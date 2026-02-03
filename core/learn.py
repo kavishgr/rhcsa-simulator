@@ -657,22 +657,198 @@ filesystems on partitions or LVs and making mounts persistent.
         },
 
         "boot": {
-            "name": "Boot Targets & System Boot",
+            "name": "Boot Process, GRUB & Recovery",
             "explanation": """
-Systemd boot targets replace traditional runlevels in RHEL 8/9.
-Common targets are multi-user.target (CLI) and graphical.target (GUI).
-You must know how to check the current target, change it temporarily,
-and set the default target for future boots. The exam may ask you to
-change boot targets or understand the boot process.
+The RHCSA exam heavily tests boot process knowledge including:
+- Systemd targets (replacing runlevels)
+- GRUB bootloader configuration
+- Root password reset procedure (CRITICAL EXAM SKILL!)
+- Boot troubleshooting and log analysis
+- initramfs management with dracut
+
+BOOT SEQUENCE:
+  1. BIOS/UEFI → 2. GRUB2 → 3. Kernel + initramfs → 4. systemd → 5. Target
+
+SYSTEMD TARGETS (vs Runlevels):
+  poweroff.target    = runlevel 0 (halt)
+  rescue.target      = runlevel 1 (single user)
+  multi-user.target  = runlevel 3 (CLI, no GUI)
+  graphical.target   = runlevel 5 (GUI)
+  reboot.target      = runlevel 6 (reboot)
+  emergency.target   = minimal shell (root fs read-only)
+
+KEY FILES:
+  /etc/default/grub          - GRUB configuration source
+  /boot/grub2/grub.cfg       - Generated GRUB config (BIOS)
+  /boot/efi/EFI/redhat/grub.cfg - Generated GRUB config (UEFI)
+  /etc/fstab                 - Filesystem mount table
+  /boot/initramfs-*.img      - Initial RAM filesystem
+
+ROOT PASSWORD RESET PROCEDURE (MEMORIZE THIS!):
+  1. Reboot system
+  2. At GRUB menu, press 'e' to edit
+  3. Find the 'linux' line, add 'rd.break' at the end
+  4. Press Ctrl+X to boot
+  5. mount -o remount,rw /sysroot
+  6. chroot /sysroot
+  7. passwd root
+  8. touch /.autorelabel
+  9. exit (twice)
+  10. System reboots and relabels
             """,
             "commands": [
-                {"name": "Show Current Target", "syntax": "systemctl get-default", "example": "systemctl get-default", "flags": {"get-default": "Show default boot target", "list-units --type=target": "Show all active targets", "systemctl isolate": "Switch target now"}},
-                {"name": "Set Default Boot Target", "syntax": "systemctl set-default <target>", "example": "systemctl set-default multi-user.target", "flags": {"set-default": "Set persistent default target", "multi-user.target": "CLI mode (runlevel 3)", "graphical.target": "GUI mode (runlevel 5)", "rescue.target": "Single-user rescue mode"}},
-                {"name": "Switch Target (Temporary)", "syntax": "systemctl isolate <target>", "example": "systemctl isolate graphical.target", "flags": {"isolate": "Switch to target immediately", "Does not change default target": "Temporary until reboot"}},
-                {"name": "Reboot and Power Off", "syntax": "systemctl reboot / poweroff", "example": "systemctl reboot", "flags": {"reboot": "Reboot system", "poweroff": "Shut down system", "halt": "Halt system", "rescue": "Enter rescue mode"}}
+                {
+                    "name": "Show/Set Default Target",
+                    "syntax": "systemctl get-default / set-default <target>",
+                    "example": "systemctl set-default multi-user.target",
+                    "flags": {
+                        "get-default": "Show current default boot target",
+                        "set-default": "Set persistent default target",
+                        "multi-user.target": "CLI mode (no GUI)",
+                        "graphical.target": "GUI mode",
+                        "rescue.target": "Single-user mode",
+                        "emergency.target": "Minimal shell"
+                    }
+                },
+                {
+                    "name": "Switch Target Immediately",
+                    "syntax": "systemctl isolate <target>",
+                    "example": "systemctl isolate rescue.target",
+                    "flags": {
+                        "isolate": "Switch to target NOW (temporary)",
+                        "Does NOT change default": "Reverts on reboot",
+                        "rescue.target": "Enter rescue mode",
+                        "emergency.target": "Enter emergency mode"
+                    }
+                },
+                {
+                    "name": "Modify GRUB Timeout",
+                    "syntax": "Edit /etc/default/grub then grub2-mkconfig",
+                    "example": "vi /etc/default/grub  # Set GRUB_TIMEOUT=5\ngrub2-mkconfig -o /boot/grub2/grub.cfg",
+                    "flags": {
+                        "GRUB_TIMEOUT": "Seconds to show menu (0 = instant boot)",
+                        "GRUB_CMDLINE_LINUX": "Kernel parameters",
+                        "grub2-mkconfig -o": "Regenerate GRUB config",
+                        "/boot/grub2/grub.cfg": "BIOS systems",
+                        "/boot/efi/EFI/redhat/grub.cfg": "UEFI systems"
+                    }
+                },
+                {
+                    "name": "Add/Remove Kernel Parameters",
+                    "syntax": "Edit GRUB_CMDLINE_LINUX in /etc/default/grub",
+                    "example": "GRUB_CMDLINE_LINUX=\"... quiet rhgb\"\ngrub2-mkconfig -o /boot/grub2/grub.cfg",
+                    "flags": {
+                        "quiet": "Suppress boot messages",
+                        "rhgb": "Red Hat graphical boot",
+                        "rd.break": "Break into emergency shell (password reset)",
+                        "systemd.unit=rescue.target": "Boot to rescue",
+                        "init=/bin/bash": "Boot to bash (alternative recovery)"
+                    }
+                },
+                {
+                    "name": "Analyze Boot Time",
+                    "syntax": "systemd-analyze [blame|critical-chain]",
+                    "example": "systemd-analyze blame | head -10",
+                    "flags": {
+                        "systemd-analyze": "Show total boot time",
+                        "blame": "Show time per service (slowest first)",
+                        "critical-chain": "Show critical path dependencies",
+                        "plot > boot.svg": "Generate boot chart"
+                    }
+                },
+                {
+                    "name": "View Boot Logs",
+                    "syntax": "journalctl -b [N] [-p priority]",
+                    "example": "journalctl -b -p err",
+                    "flags": {
+                        "-b": "Current boot only",
+                        "-b -1": "Previous boot",
+                        "-b -2": "Two boots ago",
+                        "--list-boots": "List all recorded boots",
+                        "-p err": "Errors only",
+                        "-p warning": "Warnings and above",
+                        "-p err..warning": "Errors and warnings only"
+                    }
+                },
+                {
+                    "name": "Validate fstab Before Reboot",
+                    "syntax": "findmnt --verify && mount -a",
+                    "example": "findmnt --verify --verbose",
+                    "flags": {
+                        "findmnt --verify": "Check fstab syntax",
+                        "--verbose": "Show detailed info",
+                        "mount -a": "Try to mount all entries",
+                        "CRITICAL": "Bad fstab = system won't boot!"
+                    }
+                },
+                {
+                    "name": "Rebuild initramfs",
+                    "syntax": "dracut -f [path] [kernel-version]",
+                    "example": "dracut -f",
+                    "flags": {
+                        "dracut -f": "Force rebuild for current kernel",
+                        "dracut -f /boot/initramfs-$(uname -r).img": "Explicit path",
+                        "lsinitrd": "List initramfs contents",
+                        "When to rebuild": "After adding kernel modules"
+                    }
+                },
+                {
+                    "name": "List Boot Entries (grubby)",
+                    "syntax": "grubby --info=ALL / --default-kernel",
+                    "example": "grubby --info=ALL",
+                    "flags": {
+                        "--info=ALL": "Show all boot entries",
+                        "--default-kernel": "Show default kernel path",
+                        "--default-index": "Show default entry number",
+                        "--set-default": "Set default kernel"
+                    }
+                },
+                {
+                    "name": "Schedule SELinux Relabel",
+                    "syntax": "touch /.autorelabel",
+                    "example": "touch /.autorelabel",
+                    "flags": {
+                        "/.autorelabel": "Triggers relabel on next boot",
+                        "Required after": "Password reset, major changes",
+                        "fixfiles -F onboot": "Alternative method",
+                        "Takes time": "Can take 10+ minutes on large systems"
+                    }
+                },
+                {
+                    "name": "Chroot into System (Recovery)",
+                    "syntax": "mount -o remount,rw /sysroot && chroot /sysroot",
+                    "example": "mount -o remount,rw /sysroot\nchroot /sysroot\npasswd root\ntouch /.autorelabel\nexit",
+                    "flags": {
+                        "After rd.break": "You're in minimal environment",
+                        "/sysroot": "The real root filesystem",
+                        "remount,rw": "Make it writable",
+                        "chroot": "Change root to /sysroot",
+                        "exit twice": "First exits chroot, second continues boot"
+                    }
+                }
             ],
-            "common_mistakes": ["Using 'isolate' when permanent change is needed", "Using 'set-default' when immediate change is needed", "Confusing runlevels with targets", "Not verifying change with get-default"],
-            "exam_tricks": ["Task says 'boot into' = set-default (permanent)", "Task says 'switch to' = isolate (temporary)", "Multi-user = CLI, Graphical = GUI", "Always verify with 'systemctl get-default'"]
+            "common_mistakes": [
+                "Using 'isolate' when permanent change is needed (use set-default)",
+                "Forgetting to run grub2-mkconfig after editing /etc/default/grub",
+                "Wrong grub.cfg path (BIOS vs UEFI systems)",
+                "Forgetting 'touch /.autorelabel' after password reset (SELinux blocks login!)",
+                "Not testing fstab with 'mount -a' before reboot",
+                "Typos in fstab can completely prevent boot",
+                "Forgetting to remount /sysroot as read-write before chroot",
+                "Exiting only once after chroot (need to exit twice)"
+            ],
+            "exam_tricks": [
+                "ROOT PASSWORD RESET: rd.break → remount,rw → chroot → passwd → autorelabel → exit×2",
+                "'Boot into X target' = systemctl set-default (permanent)",
+                "'Switch to X target' = systemctl isolate (temporary)",
+                "ALWAYS verify GRUB changes: grep GRUB_TIMEOUT /etc/default/grub",
+                "ALWAYS run grub2-mkconfig after editing /etc/default/grub",
+                "Check boot errors: journalctl -b -p err",
+                "Find slow services: systemd-analyze blame | head",
+                "Bad fstab = rescue mode needed. Use 'mount -o remount,rw /' to fix",
+                "Emergency vs Rescue: Emergency = minimal, Rescue = more services",
+                "UEFI path: /boot/efi/EFI/redhat/grub.cfg (not /boot/grub2/)"
+            ]
         },
 
         "containers": {

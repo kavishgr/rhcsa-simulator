@@ -2,6 +2,8 @@
 
 A realistic command-line RHCSA (Red Hat Certified System Administrator) exam simulator that generates exam tasks, validates your system configuration, and tracks your progress over time.
 
+> **Note**: This project is under active development. While functional and useful for RHCSA prep, you may encounter bugs or incomplete features. Contributions, bug reports, and feedback are welcome!
+
 ## Features
 
 ### Learning Modes

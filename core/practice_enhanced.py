@@ -8,6 +8,7 @@ from core.validator import get_validator
 from core.learn import LearnContent
 from core.ai_feedback import get_ai_agent
 from core.command_analyzer import CommandHistoryAnalyzer
+from device import get_device_manager
 from utils import formatters as fmt
 from utils.helpers import confirm_action
 from config import settings
@@ -59,12 +60,39 @@ class GuidedPracticeSession:
             print(fmt.error(f"No tasks available for {self.category}"))
             return
 
+        # Get device manager for auto-cleanup
+        device_manager = get_device_manager()
+
+        # Check if this category needs disk cleanup
+        disk_categories = {'lvm', 'filesystems', 'storage_advanced'}
+        needs_cleanup = self.category in disk_categories
+
+        if needs_cleanup:
+            device = device_manager.get_practice_device()
+            if device:
+                print(fmt.info(f"Practice device: {device}"))
+                print(fmt.dim("Resources will be cleaned up automatically after each task."))
+                print()
+
         # Practice each task with guided hints
         total_hints_used = 0
         for i, task in enumerate(tasks, 1):
-            hints_for_task = self._guided_practice_task(task, i, len(tasks))
-            total_hints_used += hints_for_task
-            self.hints_used.append(hints_for_task)
+            if needs_cleanup:
+                # Use auto-cleanup context for disk tasks
+                with device_manager.task_context(task.id, auto_cleanup=True):
+                    hints_for_task = self._guided_practice_task(task, i, len(tasks))
+                    total_hints_used += hints_for_task
+                    self.hints_used.append(hints_for_task)
+                if i < len(tasks):
+                    print(fmt.dim("Cleaning up resources..."))
+            else:
+                hints_for_task = self._guided_practice_task(task, i, len(tasks))
+                total_hints_used += hints_for_task
+                self.hints_used.append(hints_for_task)
+
+        # Final cleanup
+        if needs_cleanup:
+            device_manager.cleanup_all_resources(force=True)
 
         # Show summary
         self._show_practice_summary(len(tasks), total_hints_used)

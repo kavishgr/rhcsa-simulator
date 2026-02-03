@@ -398,11 +398,11 @@ sudo rm /var/lib/rhcsa-simulator/loops/*.img
 ## Development
 
 ### Project Stats
-- **Lines of Code**: ~7,000+
-- **Task Categories**: 12
-- **Task Types**: 25+ implemented, expandable to 100+
-- **Validators**: 50+ validation functions
-- **Modes**: 7 (Learn, Guided Practice, Command Recall, Exam, Practice, Scenario, Troubleshoot)
+- **Lines of Code**: ~12,000+
+- **Task Categories**: 14
+- **Task Types**: 137 tasks covering all RHCSA objectives
+- **Validators**: 70+ validation functions
+- **Modes**: 8 (Learn, Guided Practice, Command Recall, Exam, Practice, Scenario, Troubleshoot, Flashcards)
 - **Dependencies**: 0 (Python stdlib only, optional: anthropic for AI feedback)
 
 ### Testing Tasks
@@ -427,6 +427,8 @@ To add more tasks:
 
 ## License
 
+MIT License - see [LICENSE](LICENSE) file for details.
+
 This is an educational tool for RHCSA exam preparation. Use at your own risk on test systems only.
 
 ## Disclaimer
@@ -442,6 +444,14 @@ This is an educational tool for RHCSA exam preparation. Use at your own risk on 
 - [RHEL Documentation](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/)
 
 ## Version
+
+**v3.0.0** - Auto-Cleanup & Content Expansion (Current)
+- **DeviceManager**: Automatic cleanup of LVM/disk resources between tasks
+- **137 tasks**: 60 new tasks across all categories
+- **Comprehensive boot training**: 14 boot tasks including password reset procedure practice
+- **Expanded learning content**: Detailed boot/recovery section with rd.break walkthrough
+- **Bug fixes**: Fixed f-string hints, command recall evaluation
+- **CLI quick modes**: `--quick lvm`, `--exam`, `--learn users`
 
 **v2.2.0** - Practice Disk Support
 - Dynamic device detection for LVM tasks

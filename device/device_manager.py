@@ -265,12 +265,12 @@ class DeviceManager:
         """
         Scan the system for resources that might have been created.
         Called after task validation to catch any untracked resources.
+        Scans ALL non-system LVM, not just the practice device.
         """
+        system_vgs = {'rl', 'rl00', 'rhel', 'centos', 'fedora'}
         device = self.get_practice_device()
-        if not device:
-            return
 
-        # Check for PVs on practice device
+        # Check for ALL PVs on non-system VGs (including loop devices)
         try:
             result = subprocess.run(
                 ['pvs', '--noheadings', '-o', 'pv_name,vg_name'],
@@ -278,12 +278,16 @@ class DeviceManager:
             )
             for line in result.stdout.strip().splitlines():
                 parts = line.split()
-                if len(parts) >= 1 and device in parts[0]:
+                if len(parts) >= 2:
                     pv_name = parts[0].strip()
-                    vg_name = parts[1].strip() if len(parts) > 1 else None
-                    self.track_resource(ResourceType.PHYSICAL_VOLUME, pv_name, task_id)
-                    if vg_name:
-                        self.track_resource(ResourceType.VOLUME_GROUP, vg_name, task_id)
+                    vg_name = parts[1].strip()
+                    # Track if it's on practice device, loop device, or non-system VG
+                    is_practice = (device and device in pv_name) or '/dev/loop' in pv_name
+                    is_nonsystem_vg = vg_name not in system_vgs
+                    if is_practice or is_nonsystem_vg:
+                        self.track_resource(ResourceType.PHYSICAL_VOLUME, pv_name, task_id)
+                        if vg_name and vg_name not in system_vgs:
+                            self.track_resource(ResourceType.VOLUME_GROUP, vg_name, task_id)
         except Exception as e:
             self.logger.debug(f"Error scanning PVs: {e}")
 
@@ -324,17 +328,31 @@ class DeviceManager:
         except Exception:
             pass
 
-        # Check for mounts on practice device or practice LVs
+        # Check for mounts on practice devices, loop devices, or non-system VG LVs
         try:
             result = subprocess.run(
                 ['mount'], capture_output=True, text=True, timeout=5
             )
             for line in result.stdout.splitlines():
                 # Skip system mounts
-                if any(x in line for x in ['/boot', '/ type', '/home type']):
+                if any(x in line for x in ['/boot', '/ type', '/home type', '/var type']):
                     continue
-                # Check for practice device or mapper devices
-                if device in line or '/dev/mapper/' in line:
+
+                should_track = False
+                # Check for practice device
+                if device and device in line:
+                    should_track = True
+                # Check for loop device mounts
+                if '/dev/loop' in line:
+                    should_track = True
+                # Check for mapper devices from non-system VGs
+                if '/dev/mapper/' in line:
+                    mapper_name = line.split()[0].replace('/dev/mapper/', '')
+                    vg_part = mapper_name.split('-')[0]
+                    if vg_part not in system_vgs:
+                        should_track = True
+
+                if should_track:
                     parts = line.split()
                     if len(parts) >= 3:
                         mount_point = parts[2]
@@ -343,7 +361,7 @@ class DeviceManager:
         except Exception:
             pass
 
-        # Check for active swap on practice device
+        # Check for active swap on any non-system device
         try:
             result = subprocess.run(
                 ['swapon', '--show=NAME', '--noheadings'],
@@ -351,7 +369,17 @@ class DeviceManager:
             )
             for line in result.stdout.strip().splitlines():
                 swap_dev = line.strip()
-                if device in swap_dev or 'mapper' in swap_dev:
+                should_track = False
+                if device and device in swap_dev:
+                    should_track = True
+                if '/dev/loop' in swap_dev:
+                    should_track = True
+                if 'mapper' in swap_dev:
+                    mapper_name = swap_dev.replace('/dev/mapper/', '')
+                    vg_part = mapper_name.split('-')[0]
+                    if vg_part not in system_vgs:
+                        should_track = True
+                if should_track:
                     self.track_resource(ResourceType.SWAP, swap_dev, task_id)
         except Exception:
             pass

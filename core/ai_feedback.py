@@ -13,6 +13,10 @@ from core.command_analyzer import CommandHistoryAnalyzer
 logger = logging.getLogger(__name__)
 
 
+# API call timeout in seconds
+API_TIMEOUT = 30
+
+
 class AIFeedbackAgent:
     """
     AI agent that provides intelligent feedback on task attempts.
@@ -24,6 +28,9 @@ class AIFeedbackAgent:
         self.api_key = None
         self.client = None
         self.command_analyzer = CommandHistoryAnalyzer()
+        self._connection_failed = False  # Track if we've lost connection
+        self._failure_count = 0
+        self._max_failures = 3  # Disable after this many consecutive failures
         self._initialize_api()
 
     def _initialize_api(self):
@@ -37,7 +44,10 @@ class AIFeedbackAgent:
 
         try:
             import anthropic
-            self.client = anthropic.Anthropic(api_key=self.api_key)
+            self.client = anthropic.Anthropic(
+                api_key=self.api_key,
+                timeout=API_TIMEOUT
+            )
             logger.info("AI feedback agent initialized successfully")
         except ImportError:
             logger.warning("anthropic package not installed. Install with: pip install anthropic")
@@ -48,7 +58,36 @@ class AIFeedbackAgent:
 
     def is_available(self) -> bool:
         """Check if AI feedback is available."""
+        # Disable if too many consecutive failures (likely network issue)
+        if self._connection_failed or self._failure_count >= self._max_failures:
+            return False
         return self.client is not None
+
+    def _handle_api_error(self, e: Exception, context: str = "API call") -> None:
+        """Handle API errors and track failures."""
+        self._failure_count += 1
+
+        # Check for connection-related errors
+        error_str = str(e).lower()
+        is_connection_error = any(term in error_str for term in [
+            'connection', 'timeout', 'network', 'unreachable',
+            'refused', 'reset', 'broken pipe', 'no route'
+        ])
+
+        if is_connection_error:
+            logger.warning(f"Network error during {context}: {e}")
+            if self._failure_count >= self._max_failures:
+                self._connection_failed = True
+                logger.warning("AI feedback disabled due to repeated connection failures. "
+                             "Check your network connection.")
+        else:
+            logger.error(f"AI {context} failed: {e}")
+
+    def reset_connection_state(self):
+        """Reset connection failure state (call when network is restored)."""
+        self._connection_failed = False
+        self._failure_count = 0
+        logger.info("AI feedback connection state reset")
 
     def analyze_attempt(
         self,
@@ -91,11 +130,15 @@ class AIFeedbackAgent:
                 }]
             )
 
+            # Success - reset failure count
+            self._failure_count = 0
             feedback = response.content[0].text
             return feedback
 
+        except KeyboardInterrupt:
+            raise  # Don't catch keyboard interrupt
         except Exception as e:
-            logger.error(f"AI feedback generation failed: {e}")
+            self._handle_api_error(e, "feedback generation")
             return self._fallback_feedback(validation_result)
 
     def explain_failure(
@@ -145,10 +188,13 @@ Be concise, specific, and educational. Focus on the root cause, not just symptom
                 messages=[{"role": "user", "content": prompt}]
             )
 
+            self._failure_count = 0  # Success
             return response.content[0].text
 
+        except KeyboardInterrupt:
+            raise
         except Exception as e:
-            logger.error(f"Failed to explain failure: {e}")
+            self._handle_api_error(e, "failure explanation")
             return f"Check failed: {check_message}"
 
     def suggest_next_step(
@@ -196,10 +242,13 @@ Keep it concise (2-3 sentences). Don't give away the entire solution, just the n
                 messages=[{"role": "user", "content": prompt}]
             )
 
+            self._failure_count = 0  # Success
             return response.content[0].text
 
+        except KeyboardInterrupt:
+            raise
         except Exception as e:
-            logger.error(f"Failed to suggest next step: {e}")
+            self._handle_api_error(e, "next step suggestion")
             return "Continue working on the task requirements."
 
     def compare_approaches(
@@ -254,10 +303,13 @@ Keep it encouraging and educational (3-4 sentences)."""
                 messages=[{"role": "user", "content": prompt}]
             )
 
+            self._failure_count = 0  # Success
             return response.content[0].text
 
+        except KeyboardInterrupt:
+            raise
         except Exception as e:
-            logger.error(f"Failed to compare approaches: {e}")
+            self._handle_api_error(e, "approach comparison")
             return "Task completed."
 
     def _build_analysis_prompt(
@@ -368,10 +420,13 @@ Keep it to 1-2 sentences. Be specific and practical."""
                 messages=[{"role": "user", "content": prompt}]
             )
 
+            self._failure_count = 0  # Success
             return response.content[0].text
 
+        except KeyboardInterrupt:
+            raise
         except Exception as e:
-            logger.debug(f"Could not get learning insight: {e}")
+            self._handle_api_error(e, "learning insight")
             return None
 
 

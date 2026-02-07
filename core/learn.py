@@ -560,22 +560,44 @@ full LVM stack and resize volumes.
         "networking": {
             "name": "Networking Configuration",
             "explanation": """
-Network configuration in RHEL 8/9 uses NetworkManager and nmcli command.
-You must configure static IP addresses, DNS, hostnames, and network interfaces.
-The exam tests your ability to use nmcli to create and modify connections,
-configure IPv4/IPv6 addressing, set DNS servers, and manage network interfaces.
-Understanding connection profiles and device management is critical.
+Network configuration in RHEL 8/9 uses NetworkManager and the nmcli command.
+You must understand the difference between CONNECTIONS and DEVICES:
+  - DEVICE: Physical or virtual network interface (eth0, enp0s3)
+  - CONNECTION: Configuration profile that can be applied to a device
+
+Key concepts:
+  - One device can have multiple connection profiles (only one active)
+  - Connection names may differ from device/interface names
+  - Use 'nmcli con' for persistent config, 'ip' for temporary changes
+  - Config files stored in /etc/NetworkManager/system-connections/
+
+The exam tests: static IP configuration, DNS, hostname, creating connections,
+and troubleshooting network issues using nmcli and ip commands.
             """,
             "commands": [
                 {
-                    "name": "Show Network Connections",
-                    "syntax": "nmcli connection show",
-                    "example": "nmcli connection show",
+                    "name": "Show Connections & Devices",
+                    "syntax": "nmcli connection show / nmcli device status",
+                    "example": "nmcli con show --active",
                     "flags": {
-                        "show": "Display all connections",
-                        "show <name>": "Show specific connection details",
-                        "nmcli con show": "Short form",
-                        "nmcli device status": "Show device status"
+                        "con show": "List all connection profiles",
+                        "con show --active": "Show only active connections",
+                        "con show <name>": "Show detailed connection info",
+                        "device status": "Show all devices and their state",
+                        "device show <dev>": "Show device details",
+                        "general status": "Show overall NetworkManager status"
+                    }
+                },
+                {
+                    "name": "Create New Connection",
+                    "syntax": "nmcli con add type ethernet con-name <name> ifname <device>",
+                    "example": "nmcli con add type ethernet con-name office ifname eth1 ipv4.addresses 10.0.0.50/24 ipv4.method manual",
+                    "flags": {
+                        "con add": "Create a new connection profile",
+                        "type ethernet": "Wired connection (also: wifi, bond, team)",
+                        "con-name": "Name for the connection profile",
+                        "ifname": "Physical interface to bind to",
+                        "autoconnect yes/no": "Auto-activate on boot"
                     }
                 },
                 {
@@ -583,10 +605,11 @@ Understanding connection profiles and device management is critical.
                     "syntax": "nmcli con mod <name> ipv4.addresses <ip>/<prefix> ipv4.gateway <gw> ipv4.method manual",
                     "example": "nmcli con mod eth0 ipv4.addresses 192.168.1.100/24 ipv4.gateway 192.168.1.1 ipv4.method manual",
                     "flags": {
-                        "ipv4.addresses": "Set IP address with CIDR notation",
-                        "ipv4.gateway": "Set default gateway",
-                        "ipv4.method": "manual (static) or auto (DHCP)",
-                        "ipv4.dns": "DNS servers (space-separated)"
+                        "ipv4.addresses": "IP with CIDR prefix (required)",
+                        "ipv4.gateway": "Default gateway",
+                        "ipv4.method manual": "Static IP (CRITICAL - must set!)",
+                        "ipv4.method auto": "DHCP",
+                        "+ipv4.addresses": "Add secondary IP"
                     }
                 },
                 {
@@ -595,8 +618,9 @@ Understanding connection profiles and device management is critical.
                     "example": "nmcli con mod eth0 ipv4.dns '8.8.8.8 8.8.4.4'",
                     "flags": {
                         "ipv4.dns": "Space-separated DNS IPs (quoted)",
-                        "+ipv4.dns": "Add DNS server",
-                        "-ipv4.dns": "Remove DNS server"
+                        "+ipv4.dns": "Add DNS server to existing",
+                        "-ipv4.dns": "Remove DNS server",
+                        "ipv4.ignore-auto-dns yes": "Ignore DHCP-provided DNS"
                     }
                 },
                 {
@@ -604,35 +628,190 @@ Understanding connection profiles and device management is critical.
                     "syntax": "hostnamectl set-hostname <hostname>",
                     "example": "hostnamectl set-hostname server1.example.com",
                     "flags": {
-                        "set-hostname": "Set persistent hostname",
-                        "status": "Show current hostname",
-                        "--static": "Set static hostname",
-                        "--transient": "Set transient hostname"
+                        "set-hostname": "Set all hostname types (persistent)",
+                        "status": "Show current hostname info",
+                        "--static": "Set only static hostname",
+                        "--transient": "Set only transient (temporary)",
+                        "--pretty": "Set pretty/display hostname"
                     }
                 },
                 {
-                    "name": "Activate Connection",
-                    "syntax": "nmcli con up <name>",
+                    "name": "Activate/Deactivate Connection",
+                    "syntax": "nmcli con up/down <name>",
                     "example": "nmcli con up eth0",
                     "flags": {
-                        "up": "Activate connection",
-                        "down": "Deactivate connection",
-                        "reload": "Reload config files"
+                        "con up <name>": "Activate connection profile",
+                        "con down <name>": "Deactivate connection",
+                        "con reload": "Reload all connection files",
+                        "device connect <dev>": "Activate device with best profile",
+                        "device disconnect <dev>": "Disconnect device"
+                    }
+                },
+                {
+                    "name": "Delete Connection",
+                    "syntax": "nmcli con delete <name>",
+                    "example": "nmcli con delete old-connection",
+                    "flags": {
+                        "con delete": "Remove connection profile permanently",
+                        "con delete id <name>": "Delete by connection name"
+                    }
+                },
+                {
+                    "name": "Troubleshooting Commands",
+                    "syntax": "ip addr / ip route / ss -tuln",
+                    "example": "ip addr show eth0",
+                    "flags": {
+                        "ip addr": "Show IP addresses on all interfaces",
+                        "ip addr show <dev>": "Show IP for specific device",
+                        "ip route": "Show routing table",
+                        "ip route show default": "Show default gateway",
+                        "ss -tuln": "Show listening ports (TCP/UDP)",
+                        "ping -c 3 <host>": "Test connectivity",
+                        "nmcli -f all con show <name>": "Show all connection properties"
+                    }
+                },
+                {
+                    "name": "Network Teaming",
+                    "syntax": "nmcli con add type team con-name <name> ifname <team> team.runner <mode>",
+                    "example": "nmcli con add type team con-name team0 ifname team0 team.runner activebackup",
+                    "flags": {
+                        "type team": "Create team master interface",
+                        "type team-slave": "Create team port/slave",
+                        "team.runner": "Mode: activebackup, roundrobin, loadbalance, lacp",
+                        "master <team>": "Assign slave to master team"
                     }
                 }
             ],
             "common_mistakes": [
+                "Forgetting ipv4.method manual (IP set but DHCP still used)",
                 "Forgetting CIDR notation (/24) in IP address",
-                "Not quoting DNS servers (space-separated)",
-                "Using 'device' instead of 'connection' for config",
-                "Forgetting to activate connection after changes",
-                "Setting ipv4.method to auto when manual IP is required"
+                "Not quoting DNS servers when space-separated",
+                "Using 'nmcli device' to configure (use 'nmcli connection')",
+                "Forgetting 'nmcli con up' to apply changes",
+                "Confusing connection name with interface/device name",
+                "Not checking 'nmcli con show' to verify config before activating"
             ],
             "exam_tricks": [
-                "Must use nmcli, not editing config files directly",
-                "Connection name may differ from interface name",
-                "Changes require 'nmcli con up' to take effect",
-                "Hostname must be FQDN if specified (server.domain.com)"
+                "Always use nmcli, never edit config files directly on exam",
+                "Connection names can be anything - don't assume they match interface",
+                "'nmcli con mod' only saves config; 'nmcli con up' applies it",
+                "Use 'nmcli con show <name>' to verify settings before activation",
+                "If hostname must be FQDN, include domain (server.example.com)",
+                "ip commands are temporary - reboot loses changes; nmcli persists",
+                "Check 'nmcli device status' to see which connections are active"
+            ]
+        },
+
+        "firewall": {
+            "name": "Firewall Configuration",
+            "explanation": """
+RHEL uses firewalld for dynamic firewall management. Key concepts:
+
+ZONES: Pre-defined security levels applied to interfaces
+  - public: Default, untrusted networks (allows ssh, dhcpv6-client)
+  - trusted: All traffic allowed
+  - home/work/internal: More permissive than public
+  - dmz: Limited access for DMZ servers
+  - external: For NAT/masquerading
+  - block: Reject all incoming (outgoing allowed)
+  - drop: Drop all incoming silently
+
+SERVICES vs PORTS:
+  - Services: Named rules (http, https, ssh) - preferred method
+  - Ports: Numeric (80/tcp, 443/tcp) - for custom apps
+
+PERMANENT vs RUNTIME:
+  - Without --permanent: Active now, lost on reload/reboot
+  - With --permanent: Saved to config, needs --reload to apply
+  - Best practice: Use --permanent then --reload
+            """,
+            "commands": [
+                {
+                    "name": "Zone Management",
+                    "syntax": "firewall-cmd --get-zones / --get-default-zone / --set-default-zone=<zone>",
+                    "example": "firewall-cmd --set-default-zone=trusted",
+                    "flags": {
+                        "--get-zones": "List all available zones",
+                        "--get-default-zone": "Show current default zone",
+                        "--set-default-zone=": "Change default zone (auto-permanent)",
+                        "--get-active-zones": "Show zones with assigned interfaces",
+                        "--zone=<zone> --list-all": "Show all settings for a zone"
+                    }
+                },
+                {
+                    "name": "Allow Service",
+                    "syntax": "firewall-cmd --zone=<zone> --add-service=<service> --permanent",
+                    "example": "firewall-cmd --add-service=http --permanent && firewall-cmd --reload",
+                    "flags": {
+                        "--add-service=": "Allow a service (http, https, ssh, nfs, etc.)",
+                        "--remove-service=": "Remove a service",
+                        "--list-services": "List allowed services",
+                        "--get-services": "List all available service names",
+                        "--permanent": "Make change persistent"
+                    }
+                },
+                {
+                    "name": "Allow Port",
+                    "syntax": "firewall-cmd --zone=<zone> --add-port=<port>/<protocol> --permanent",
+                    "example": "firewall-cmd --add-port=8080/tcp --permanent && firewall-cmd --reload",
+                    "flags": {
+                        "--add-port=": "Allow port (e.g., 8080/tcp, 53/udp)",
+                        "--remove-port=": "Remove port rule",
+                        "--list-ports": "List allowed ports",
+                        "--permanent": "Make change persistent"
+                    }
+                },
+                {
+                    "name": "Rich Rules",
+                    "syntax": "firewall-cmd --add-rich-rule='rule family=ipv4 source address=<ip> port port=<port> protocol=tcp accept'",
+                    "example": "firewall-cmd --add-rich-rule='rule family=\"ipv4\" source address=\"192.168.1.0/24\" service name=\"http\" accept' --permanent",
+                    "flags": {
+                        "rule family=": "ipv4 or ipv6",
+                        "source address=": "Source IP or network",
+                        "port port=": "Destination port",
+                        "protocol=": "tcp or udp",
+                        "service name=": "Use service name instead of port",
+                        "accept/reject/drop": "Action to take"
+                    }
+                },
+                {
+                    "name": "Reload & Status",
+                    "syntax": "firewall-cmd --reload / systemctl status firewalld",
+                    "example": "firewall-cmd --reload",
+                    "flags": {
+                        "--reload": "Apply permanent changes to runtime",
+                        "--complete-reload": "Full reload (drops connections)",
+                        "--state": "Check if firewalld is running",
+                        "systemctl status firewalld": "Full service status"
+                    }
+                },
+                {
+                    "name": "Interface to Zone",
+                    "syntax": "firewall-cmd --zone=<zone> --change-interface=<iface> --permanent",
+                    "example": "firewall-cmd --zone=trusted --change-interface=eth1 --permanent",
+                    "flags": {
+                        "--change-interface=": "Move interface to zone",
+                        "--add-interface=": "Add interface to zone",
+                        "--remove-interface=": "Remove interface from zone",
+                        "--get-zone-of-interface=": "Check which zone an interface is in"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Forgetting --permanent (changes lost on reload/reboot)",
+                "Forgetting --reload after --permanent (changes not active)",
+                "Using wrong zone (check --get-active-zones)",
+                "Port format errors (must be port/protocol like 80/tcp)",
+                "Rich rule quoting issues (use single quotes outside, escaped doubles inside)",
+                "Firewalld not running (systemctl start firewalld)"
+            ],
+            "exam_tricks": [
+                "Always use --permanent then --reload for persistent changes",
+                "--set-default-zone is automatically permanent (no --reload needed)",
+                "Prefer services over ports when available (--get-services to list)",
+                "Rich rules for source IP restrictions (common exam question)",
+                "Check firewalld is enabled: systemctl enable --now firewalld",
+                "Verify with --list-all after making changes"
             ]
         },
 

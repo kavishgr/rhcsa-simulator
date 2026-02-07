@@ -75,7 +75,10 @@ SAFE_VALIDATION_COMMANDS = {
     'ls', 'stat', 'getfacl', 'cat', 'head', 'tail', 'find',
 
     # Network info
-    'ip', 'nmcli', 'hostnamectl', 'hostname',
+    'ip', 'nmcli', 'hostnamectl', 'hostname', 'ss', 'ping', 'teamdctl',
+
+    # Firewall info
+    'firewall-cmd',
 
     # SELinux info
     'getenforce', 'getsebool', 'semanage', 'sestatus', 'matchpathcon',

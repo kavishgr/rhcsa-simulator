@@ -242,6 +242,19 @@ class SafeCommandExecutor:
                     "find command with -exec or -delete is not allowed"
                 )
 
+        # Ensure firewall-cmd is read-only
+        elif base_cmd == 'firewall-cmd':
+            # Block any modifying operations
+            modify_flags = ['--add-', '--remove-', '--delete', '--set-default-zone',
+                           '--change-interface', '--add-interface', '--remove-interface',
+                           '--reload', '--complete-reload', '--permanent']
+            cmd_str = ' '.join(command)
+            if any(flag in cmd_str for flag in modify_flags):
+                raise SecurityError(
+                    "firewall-cmd modification commands are not allowed. "
+                    "Only read-only query operations permitted."
+                )
+
     def can_execute(self, command):
         """
         Check if a command can be executed without actually running it.

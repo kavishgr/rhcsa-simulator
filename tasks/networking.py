@@ -796,3 +796,648 @@ class ConfigureFirewallRichRuleTask(BaseTask):
 
         passed = total_points >= (self.points * 0.7)
         return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class CreateConnectionTask(BaseTask):
+    """Create a new network connection from scratch."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_create_conn_001",
+            category="networking",
+            difficulty="medium",
+            points=10
+        )
+        self.connection_name = None
+        self.interface = None
+        self.ip_address = None
+        self.netmask = None
+
+    def generate(self, **params):
+        """Generate create connection task."""
+        self.connection_name = params.get('connection', 'lab-connection')
+        self.interface = params.get('interface', 'eth1')
+        self.ip_address = params.get('ip', f'10.0.{random.randint(1,254)}.{random.randint(10,250)}')
+        self.netmask = params.get('netmask', '24')
+
+        self.description = (
+            f"Create a NEW network connection:\n"
+            f"  - Connection name: {self.connection_name}\n"
+            f"  - Interface: {self.interface}\n"
+            f"  - IP Address: {self.ip_address}/{self.netmask}\n"
+            f"  - Method: Static (manual)\n"
+            f"  - The connection should be created, not just modified"
+        )
+
+        self.hints = [
+            f"Create connection: nmcli con add type ethernet con-name {self.connection_name} ifname {self.interface}",
+            f"Set IP: nmcli con mod {self.connection_name} ipv4.addresses {self.ip_address}/{self.netmask}",
+            f"Set method: nmcli con mod {self.connection_name} ipv4.method manual",
+            f"Activate: nmcli con up {self.connection_name}",
+            "Key difference: 'con add' creates new, 'con mod' modifies existing"
+        ]
+
+        return self
+
+    def validate(self):
+        """Validate connection creation."""
+        checks = []
+        total_points = 0
+
+        # Check 1: Connection exists (4 points)
+        conn_info = get_nmcli_connection_info(self.connection_name)
+        if conn_info:
+            checks.append(ValidationCheck(
+                name="connection_exists",
+                passed=True,
+                points=4,
+                message=f"Connection '{self.connection_name}' exists"
+            ))
+            total_points += 4
+
+            # Check 2: Correct interface (2 points)
+            if conn_info.get('connection.interface-name') == self.interface:
+                checks.append(ValidationCheck(
+                    name="correct_interface",
+                    passed=True,
+                    points=2,
+                    message=f"Connection bound to {self.interface}"
+                ))
+                total_points += 2
+            else:
+                checks.append(ValidationCheck(
+                    name="correct_interface",
+                    passed=False,
+                    points=0,
+                    max_points=2,
+                    message=f"Interface mismatch"
+                ))
+
+            # Check 3: IP configured (4 points)
+            if self.ip_address in str(conn_info.get('ipv4.addresses', '')):
+                checks.append(ValidationCheck(
+                    name="ip_configured",
+                    passed=True,
+                    points=4,
+                    message=f"IP {self.ip_address} configured"
+                ))
+                total_points += 4
+            else:
+                checks.append(ValidationCheck(
+                    name="ip_configured",
+                    passed=False,
+                    points=0,
+                    max_points=4,
+                    message=f"IP not configured correctly"
+                ))
+        else:
+            checks.append(ValidationCheck(
+                name="connection_exists",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Connection '{self.connection_name}' not found"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class ConfigureFirewallZoneTask(BaseTask):
+    """Configure firewall zone settings."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_firewall_zone_001",
+            category="networking",
+            difficulty="medium",
+            points=10
+        )
+        self.zone = None
+        self.interface = None
+        self.set_default = False
+
+    def generate(self, **params):
+        """Generate firewall zone task."""
+        zones = ['trusted', 'home', 'internal', 'work', 'dmz', 'external', 'block']
+        self.zone = params.get('zone', random.choice(zones))
+        self.interface = params.get('interface', 'eth0')
+        self.set_default = params.get('set_default', random.choice([True, False]))
+
+        if self.set_default:
+            self.description = (
+                f"Configure firewall default zone:\n"
+                f"  - Set default zone to: {self.zone}\n"
+                f"  - Make the change permanent\n"
+                f"  - Ensure firewalld is running"
+            )
+            self.hints = [
+                f"Set default zone: firewall-cmd --set-default-zone={self.zone}",
+                "Verify: firewall-cmd --get-default-zone",
+                "This change is automatically permanent",
+                "List all zones: firewall-cmd --get-zones"
+            ]
+        else:
+            self.description = (
+                f"Configure firewall zone for interface:\n"
+                f"  - Interface: {self.interface}\n"
+                f"  - Zone: {self.zone}\n"
+                f"  - Make the change permanent"
+            )
+            self.hints = [
+                f"Add interface to zone: firewall-cmd --zone={self.zone} --change-interface={self.interface} --permanent",
+                "Reload: firewall-cmd --reload",
+                f"Verify: firewall-cmd --get-zone-of-interface={self.interface}",
+                "Or verify: firewall-cmd --get-active-zones"
+            ]
+
+        return self
+
+    def validate(self):
+        """Validate firewall zone configuration."""
+        checks = []
+        total_points = 0
+        from validators.safe_executor import execute_safe
+
+        # Check 1: Firewalld running (3 points)
+        result = execute_safe(['systemctl', 'is-active', 'firewalld'])
+        if result.success and result.stdout.strip() == 'active':
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=True,
+                points=3,
+                message="firewalld is running"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="firewalld_running",
+                passed=False,
+                points=0,
+                max_points=3,
+                message="firewalld is not running"
+            ))
+            passed = False
+            return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+        if self.set_default:
+            # Check 2: Default zone set (7 points)
+            result = execute_safe(['firewall-cmd', '--get-default-zone'])
+            if result.success and result.stdout.strip() == self.zone:
+                checks.append(ValidationCheck(
+                    name="default_zone",
+                    passed=True,
+                    points=7,
+                    message=f"Default zone is {self.zone}"
+                ))
+                total_points += 7
+            else:
+                checks.append(ValidationCheck(
+                    name="default_zone",
+                    passed=False,
+                    points=0,
+                    max_points=7,
+                    message=f"Default zone is {result.stdout.strip()}, expected {self.zone}"
+                ))
+        else:
+            # Check 2: Interface in correct zone (7 points)
+            result = execute_safe(['firewall-cmd', f'--get-zone-of-interface={self.interface}'])
+            if result.success and result.stdout.strip() == self.zone:
+                checks.append(ValidationCheck(
+                    name="interface_zone",
+                    passed=True,
+                    points=7,
+                    message=f"Interface {self.interface} is in zone {self.zone}"
+                ))
+                total_points += 7
+            else:
+                checks.append(ValidationCheck(
+                    name="interface_zone",
+                    passed=False,
+                    points=0,
+                    max_points=7,
+                    message=f"Interface not in expected zone"
+                ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class NetworkTroubleshootingTask(BaseTask):
+    """Troubleshoot network connectivity issues."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_troubleshoot_001",
+            category="networking",
+            difficulty="exam",
+            points=15
+        )
+        self.connection_name = None
+        self.expected_ip = None
+        self.expected_gateway = None
+
+    def generate(self, **params):
+        """Generate troubleshooting task."""
+        self.connection_name = params.get('connection', 'eth0')
+        self.expected_ip = params.get('ip', f'192.168.100.{random.randint(10,250)}')
+        self.expected_gateway = params.get('gateway', '192.168.100.1')
+
+        self.description = (
+            f"Troubleshoot and fix network connectivity:\n"
+            f"  - Connection: {self.connection_name}\n"
+            f"  - Required IP: {self.expected_ip}/24\n"
+            f"  - Required Gateway: {self.expected_gateway}\n"
+            f"  - Ensure the connection is active and working\n"
+            f"  - Configuration must be persistent\n\n"
+            f"  Hint: The connection may need to be created, modified, or activated"
+        )
+
+        self.hints = [
+            "First diagnose: nmcli con show, nmcli device status",
+            "Check current IP: ip addr show",
+            "Check route: ip route show",
+            f"If connection missing: nmcli con add type ethernet con-name {self.connection_name} ifname {self.connection_name}",
+            f"Set IP: nmcli con mod {self.connection_name} ipv4.addresses {self.expected_ip}/24 ipv4.gateway {self.expected_gateway} ipv4.method manual",
+            f"Activate: nmcli con up {self.connection_name}",
+            "Verify: ping {gateway} (if reachable)"
+        ]
+
+        return self
+
+    def validate(self):
+        """Validate network troubleshooting."""
+        checks = []
+        total_points = 0
+
+        # Check 1: Connection exists (3 points)
+        conn_info = get_nmcli_connection_info(self.connection_name)
+        if conn_info:
+            checks.append(ValidationCheck(
+                name="connection_exists",
+                passed=True,
+                points=3,
+                message=f"Connection '{self.connection_name}' exists"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="connection_exists",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Connection '{self.connection_name}' not found"
+            ))
+
+        # Check 2: IP address configured (5 points)
+        actual_ip = get_ip_address(self.connection_name)
+        ip_in_config = conn_info and self.expected_ip in str(conn_info.get('ipv4.addresses', ''))
+
+        if actual_ip == self.expected_ip:
+            checks.append(ValidationCheck(
+                name="ip_active",
+                passed=True,
+                points=5,
+                message=f"IP {self.expected_ip} is active"
+            ))
+            total_points += 5
+        elif ip_in_config:
+            checks.append(ValidationCheck(
+                name="ip_active",
+                passed=True,
+                points=3,
+                message=f"IP configured but connection may not be active (partial)"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="ip_active",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f"IP is {actual_ip}, expected {self.expected_ip}"
+            ))
+
+        # Check 3: Gateway configured (4 points)
+        current_gw = get_default_gateway()
+        gw_in_config = conn_info and self.expected_gateway in str(conn_info.get('ipv4.gateway', ''))
+
+        if current_gw == self.expected_gateway:
+            checks.append(ValidationCheck(
+                name="gateway_active",
+                passed=True,
+                points=4,
+                message=f"Gateway {self.expected_gateway} is active"
+            ))
+            total_points += 4
+        elif gw_in_config:
+            checks.append(ValidationCheck(
+                name="gateway_active",
+                passed=True,
+                points=2,
+                message=f"Gateway configured but may not be active (partial)"
+            ))
+            total_points += 2
+        else:
+            checks.append(ValidationCheck(
+                name="gateway_active",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Gateway is {current_gw}, expected {self.expected_gateway}"
+            ))
+
+        # Check 4: Interface is UP (3 points)
+        state = get_interface_state(self.connection_name)
+        if state == 'UP':
+            checks.append(ValidationCheck(
+                name="interface_up",
+                passed=True,
+                points=3,
+                message="Interface is UP"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="interface_up",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Interface is {state}, expected UP"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class ConfigureNetworkTeamTask(BaseTask):
+    """Configure network teaming for link aggregation."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_team_001",
+            category="networking",
+            difficulty="exam",
+            points=18
+        )
+        self.team_name = None
+        self.team_ip = None
+        self.runner = None
+        self.port_interfaces = None
+
+    def generate(self, **params):
+        """Generate network teaming task."""
+        self.team_name = params.get('team_name', 'team0')
+        self.team_ip = params.get('ip', f'10.10.10.{random.randint(10,250)}')
+        runners = ['activebackup', 'roundrobin', 'loadbalance']
+        self.runner = params.get('runner', random.choice(runners))
+        self.port_interfaces = params.get('ports', ['eth1', 'eth2'])
+
+        runner_desc = {
+            'activebackup': 'Active-Backup (failover)',
+            'roundrobin': 'Round-Robin (load balance)',
+            'loadbalance': 'Load Balance'
+        }
+
+        self.description = (
+            f"Configure network teaming:\n"
+            f"  - Team interface: {self.team_name}\n"
+            f"  - Team IP: {self.team_ip}/24\n"
+            f"  - Runner (mode): {self.runner} - {runner_desc.get(self.runner, '')}\n"
+            f"  - Port interfaces: {', '.join(self.port_interfaces)}\n"
+            f"  - Configuration must be persistent"
+        )
+
+        self.hints = [
+            f"Create team: nmcli con add type team con-name {self.team_name} ifname {self.team_name} team.runner {self.runner}",
+            f"Add port: nmcli con add type team-slave con-name {self.team_name}-port1 ifname {self.port_interfaces[0]} master {self.team_name}",
+            f"Add port: nmcli con add type team-slave con-name {self.team_name}-port2 ifname {self.port_interfaces[1]} master {self.team_name}",
+            f"Set IP: nmcli con mod {self.team_name} ipv4.addresses {self.team_ip}/24 ipv4.method manual",
+            f"Activate: nmcli con up {self.team_name}",
+            f"Verify: teamdctl {self.team_name} state",
+            "Team runners: activebackup, roundrobin, loadbalance, broadcast, lacp"
+        ]
+
+        return self
+
+    def validate(self):
+        """Validate network teaming configuration."""
+        checks = []
+        total_points = 0
+        from validators.safe_executor import execute_safe
+
+        # Check 1: Team connection exists (4 points)
+        conn_info = get_nmcli_connection_info(self.team_name)
+        if conn_info:
+            checks.append(ValidationCheck(
+                name="team_exists",
+                passed=True,
+                points=4,
+                message=f"Team connection '{self.team_name}' exists"
+            ))
+            total_points += 4
+        else:
+            checks.append(ValidationCheck(
+                name="team_exists",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"Team connection '{self.team_name}' not found"
+            ))
+            passed = False
+            return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+        # Check 2: Team interface exists (3 points)
+        result = execute_safe(['ip', 'link', 'show', self.team_name])
+        if result.success and self.team_name in result.stdout:
+            checks.append(ValidationCheck(
+                name="team_interface",
+                passed=True,
+                points=3,
+                message=f"Team interface {self.team_name} exists"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="team_interface",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Team interface not found"
+            ))
+
+        # Check 3: IP configured (4 points)
+        if self.team_ip in str(conn_info.get('ipv4.addresses', '')):
+            checks.append(ValidationCheck(
+                name="team_ip",
+                passed=True,
+                points=4,
+                message=f"Team IP {self.team_ip} configured"
+            ))
+            total_points += 4
+        else:
+            actual_ip = get_ip_address(self.team_name)
+            if actual_ip == self.team_ip:
+                checks.append(ValidationCheck(
+                    name="team_ip",
+                    passed=True,
+                    points=4,
+                    message=f"Team IP {self.team_ip} active"
+                ))
+                total_points += 4
+            else:
+                checks.append(ValidationCheck(
+                    name="team_ip",
+                    passed=False,
+                    points=0,
+                    max_points=4,
+                    message=f"Team IP not configured correctly"
+                ))
+
+        # Check 4: Runner mode (3 points)
+        result = execute_safe(['nmcli', '-g', 'team.runner', 'con', 'show', self.team_name])
+        if result.success and self.runner in result.stdout:
+            checks.append(ValidationCheck(
+                name="team_runner",
+                passed=True,
+                points=3,
+                message=f"Team runner is {self.runner}"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="team_runner",
+                passed=False,
+                points=0,
+                max_points=3,
+                message=f"Team runner not set to {self.runner}"
+            ))
+
+        # Check 5: At least one port configured (4 points)
+        result = execute_safe(['nmcli', 'con', 'show'])
+        port_found = False
+        if result.success:
+            for port in self.port_interfaces:
+                if f'{self.team_name}' in result.stdout and 'team-slave' in result.stdout:
+                    port_found = True
+                    break
+                if port in result.stdout:
+                    port_found = True
+                    break
+
+        if port_found:
+            checks.append(ValidationCheck(
+                name="team_ports",
+                passed=True,
+                points=4,
+                message="Team ports configured"
+            ))
+            total_points += 4
+        else:
+            checks.append(ValidationCheck(
+                name="team_ports",
+                passed=False,
+                points=0,
+                max_points=4,
+                message="No team ports found"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)
+
+
+@TaskRegistry.register("networking")
+class SwitchToStaticIPTask(BaseTask):
+    """Switch connection from DHCP to static IP."""
+
+    def __init__(self):
+        super().__init__(
+            id="net_dhcp_static_001",
+            category="networking",
+            difficulty="easy",
+            points=8
+        )
+        self.connection_name = None
+        self.ip_address = None
+
+    def generate(self, **params):
+        """Generate DHCP to static task."""
+        self.connection_name = params.get('connection', 'eth0')
+        self.ip_address = params.get('ip', f'172.16.{random.randint(1,254)}.{random.randint(10,250)}')
+
+        self.description = (
+            f"Switch connection from DHCP to static IP:\n"
+            f"  - Connection: {self.connection_name}\n"
+            f"  - Static IP: {self.ip_address}/24\n"
+            f"  - Change IPv4 method from 'auto' to 'manual'\n"
+            f"  - Activate the change"
+        )
+
+        self.hints = [
+            "Current method: nmcli -f ipv4.method con show {connection}",
+            f"Set IP: nmcli con mod {self.connection_name} ipv4.addresses {self.ip_address}/24",
+            f"Change method: nmcli con mod {self.connection_name} ipv4.method manual",
+            f"Activate: nmcli con up {self.connection_name}",
+            "DHCP = auto, Static = manual"
+        ]
+
+        return self
+
+    def validate(self):
+        """Validate DHCP to static switch."""
+        checks = []
+        total_points = 0
+
+        # Check 1: Method is manual (4 points)
+        conn_info = get_nmcli_connection_info(self.connection_name)
+        if conn_info and conn_info.get('ipv4.method') == 'manual':
+            checks.append(ValidationCheck(
+                name="method_manual",
+                passed=True,
+                points=4,
+                message="IPv4 method is 'manual' (static)"
+            ))
+            total_points += 4
+        else:
+            method = conn_info.get('ipv4.method', 'unknown') if conn_info else 'unknown'
+            checks.append(ValidationCheck(
+                name="method_manual",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"IPv4 method is '{method}', expected 'manual'"
+            ))
+
+        # Check 2: IP configured (4 points)
+        actual_ip = get_ip_address(self.connection_name)
+        if actual_ip == self.ip_address:
+            checks.append(ValidationCheck(
+                name="ip_set",
+                passed=True,
+                points=4,
+                message=f"Static IP {self.ip_address} is active"
+            ))
+            total_points += 4
+        elif conn_info and self.ip_address in str(conn_info.get('ipv4.addresses', '')):
+            checks.append(ValidationCheck(
+                name="ip_set",
+                passed=True,
+                points=3,
+                message=f"IP configured, connection may need activation (partial)"
+            ))
+            total_points += 3
+        else:
+            checks.append(ValidationCheck(
+                name="ip_set",
+                passed=False,
+                points=0,
+                max_points=4,
+                message=f"IP is {actual_ip}, expected {self.ip_address}"
+            ))
+
+        passed = total_points >= (self.points * 0.7)
+        return ValidationResult(self.id, passed, total_points, self.points, checks)

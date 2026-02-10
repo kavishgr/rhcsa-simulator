@@ -244,15 +244,26 @@ class SafeCommandExecutor:
 
         # Ensure firewall-cmd is read-only
         elif base_cmd == 'firewall-cmd':
-            # Block any modifying operations
+            cmd_str = ' '.join(command)
+
+            # Allow --permanent only with read-only commands (--list-*, --get-*)
+            is_query = any(q in cmd_str for q in ['--list-', '--get-', '--query-'])
+
+            # Block modifying operations
             modify_flags = ['--add-', '--remove-', '--delete', '--set-default-zone',
                            '--change-interface', '--add-interface', '--remove-interface',
-                           '--reload', '--complete-reload', '--permanent']
-            cmd_str = ' '.join(command)
+                           '--reload', '--complete-reload']
+
             if any(flag in cmd_str for flag in modify_flags):
                 raise SecurityError(
                     "firewall-cmd modification commands are not allowed. "
                     "Only read-only query operations permitted."
+                )
+
+            # Block --permanent unless it's a query operation
+            if '--permanent' in cmd_str and not is_query:
+                raise SecurityError(
+                    "firewall-cmd --permanent is only allowed with query operations."
                 )
 
     def can_execute(self, command):

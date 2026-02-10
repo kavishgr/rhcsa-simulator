@@ -644,8 +644,15 @@ class ConfigureFirewallServiceTask(BaseTask):
             ))
 
         # Check 2: Service is allowed (5 points)
+        # Check runtime config
         result = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-services'])
-        if result.success and self.service in result.stdout:
+        runtime_has_service = result.success and self.service in result.stdout
+
+        # Also check permanent config
+        result_perm = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-services', '--permanent'])
+        permanent_has_service = result_perm.success and self.service in result_perm.stdout
+
+        if runtime_has_service:
             checks.append(ValidationCheck(
                 name="service_allowed",
                 passed=True,
@@ -653,14 +660,36 @@ class ConfigureFirewallServiceTask(BaseTask):
                 message=f"Service '{self.service}' is allowed in zone {self.zone}"
             ))
             total_points += 5
-        else:
+        elif permanent_has_service:
+            # Service is in permanent config but not runtime - user forgot to reload
             checks.append(ValidationCheck(
                 name="service_allowed",
                 passed=False,
-                points=0,
+                points=2,  # Partial credit
                 max_points=5,
-                message=f"Service '{self.service}' is not allowed"
+                message=f"Service '{self.service}' is in permanent config but not active. Run: firewall-cmd --reload"
             ))
+            total_points += 2
+        else:
+            # Check if maybe wrong zone
+            result_default = execute_safe(['firewall-cmd', '--list-services'])
+            if result_default.success and self.service in result_default.stdout:
+                checks.append(ValidationCheck(
+                    name="service_allowed",
+                    passed=False,
+                    points=1,
+                    max_points=5,
+                    message=f"Service '{self.service}' found in default zone, but task requires zone '{self.zone}'"
+                ))
+                total_points += 1
+            else:
+                checks.append(ValidationCheck(
+                    name="service_allowed",
+                    passed=False,
+                    points=0,
+                    max_points=5,
+                    message=f"Service '{self.service}' is not allowed in zone {self.zone}"
+                ))
 
         passed = total_points >= (self.points * 0.7)
         return ValidationResult(self.id, passed, total_points, self.points, checks)
@@ -730,9 +759,17 @@ class ConfigureFirewallPortTask(BaseTask):
             ))
 
         # Check 2: Port is allowed (5 points)
-        result = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-ports'])
         port_str = f'{self.port}/{self.protocol}'
-        if result.success and port_str in result.stdout:
+
+        # Check runtime config
+        result = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-ports'])
+        runtime_has_port = result.success and port_str in result.stdout
+
+        # Check permanent config
+        result_perm = execute_safe(['firewall-cmd', f'--zone={self.zone}', '--list-ports', '--permanent'])
+        permanent_has_port = result_perm.success and port_str in result_perm.stdout
+
+        if runtime_has_port:
             checks.append(ValidationCheck(
                 name="port_allowed",
                 passed=True,
@@ -740,13 +777,22 @@ class ConfigureFirewallPortTask(BaseTask):
                 message=f"Port {port_str} is allowed"
             ))
             total_points += 5
+        elif permanent_has_port:
+            checks.append(ValidationCheck(
+                name="port_allowed",
+                passed=False,
+                points=2,
+                max_points=5,
+                message=f"Port {port_str} is in permanent config but not active. Run: firewall-cmd --reload"
+            ))
+            total_points += 2
         else:
             checks.append(ValidationCheck(
                 name="port_allowed",
                 passed=False,
                 points=0,
                 max_points=5,
-                message=f"Port {port_str} is not allowed"
+                message=f"Port {port_str} is not allowed in zone {self.zone}"
             ))
 
         passed = total_points >= (self.points * 0.7)

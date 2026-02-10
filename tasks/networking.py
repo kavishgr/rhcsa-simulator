@@ -1290,20 +1290,40 @@ class ConfigureNetworkTeamTask(BaseTask):
         self.team_ip = params.get('ip', f'10.10.10.{random.randint(10,250)}')
         runners = ['activebackup', 'roundrobin', 'loadbalance']
         self.runner = params.get('runner', random.choice(runners))
+
         # Get secondary interfaces for teaming (need at least 2)
         try:
-            from device.network_manager import get_secondary_interfaces
+            from device.network_manager import get_secondary_interfaces, get_available_interfaces
+            all_ifaces = get_available_interfaces()
             secondary = get_secondary_interfaces()
-            default_ports = secondary[:2] if len(secondary) >= 2 else ['eth1', 'eth2']
+            if len(secondary) >= 2:
+                default_ports = secondary[:2]
+            elif len(all_ifaces) >= 2:
+                # Use any 2 interfaces (warn user about primary)
+                default_ports = all_ifaces[:2]
+            else:
+                # Not enough interfaces - use placeholder names
+                default_ports = ['eth1', 'eth2']
         except Exception:
             default_ports = ['eth1', 'eth2']
+
         self.port_interfaces = params.get('ports') or default_ports
+        self._insufficient_interfaces = default_ports == ['eth1', 'eth2']
 
         runner_desc = {
             'activebackup': 'Active-Backup (failover)',
             'roundrobin': 'Round-Robin (load balance)',
             'loadbalance': 'Load Balance'
         }
+
+        # Check if we have enough interfaces
+        iface_warning = ""
+        if self._insufficient_interfaces:
+            iface_warning = (
+                f"\n\n  NOTE: Your VM needs 2+ network adapters for teaming!\n"
+                f"  Add adapters in VirtualBox: Settings -> Network -> Adapter 2, 3\n"
+                f"  Then run: nmcli device status"
+            )
 
         self.description = (
             f"Configure network teaming:\n"
@@ -1312,6 +1332,7 @@ class ConfigureNetworkTeamTask(BaseTask):
             f"  - Runner (mode): {self.runner} - {runner_desc.get(self.runner, '')}\n"
             f"  - Port interfaces: {', '.join(self.port_interfaces)}\n"
             f"  - Configuration must be persistent"
+            f"{iface_warning}"
         )
 
         self.hints = [
@@ -1420,16 +1441,31 @@ class ConfigureNetworkTeamTask(BaseTask):
             ))
 
         # Check 5: At least one port configured (4 points)
-        result = execute_safe(['nmcli', 'con', 'show'])
-        port_found = False
+        # Look for team-slave connections with this team as master
+        result = execute_safe(['nmcli', '-t', '-f', 'NAME,TYPE,DEVICE', 'con', 'show'])
+        ports_found = []
         if result.success:
-            for port in self.port_interfaces:
-                if f'{self.team_name}' in result.stdout and 'team-slave' in result.stdout:
-                    port_found = True
-                    break
-                if port in result.stdout:
-                    port_found = True
-                    break
+            for line in result.stdout.splitlines():
+                # Format: connection-name:type:device
+                if 'team-slave' in line.lower() or 'ethernet' in line.lower():
+                    parts = line.split(':')
+                    if len(parts) >= 1:
+                        conn_name = parts[0]
+                        # Check if this connection is a slave of our team
+                        slave_check = execute_safe(['nmcli', '-g', 'connection.master', 'con', 'show', conn_name])
+                        if slave_check.success and self.team_name in slave_check.stdout:
+                            ports_found.append(conn_name)
+
+        # Also check using teamdctl if available
+        if not ports_found:
+            team_state = execute_safe(['teamdctl', self.team_name, 'state'])
+            if team_state.success and 'ports:' in team_state.stdout.lower():
+                # teamdctl shows ports, so at least one exists
+                for port in self.port_interfaces:
+                    if port in team_state.stdout:
+                        ports_found.append(port)
+
+        port_found = len(ports_found) > 0
 
         if port_found:
             checks.append(ValidationCheck(

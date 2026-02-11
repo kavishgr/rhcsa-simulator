@@ -1308,6 +1308,833 @@ You must know crontab syntax (minute hour day month weekday).
             ],
             "common_mistakes": ["Wrong field order", "Forgetting absolute paths"],
             "exam_tricks": ["Crontab: MIN HOUR DAY MONTH WEEKDAY", "0 2 * * * = 2 AM daily"]
+        },
+
+        "scripting": {
+            "name": "Shell Scripting (Bash)",
+            "explanation": """
+Shell scripting is essential for automating tasks in Linux. The RHCSA exam
+tests your ability to write basic bash scripts with conditionals, loops,
+command-line arguments, and proper exit codes.
+
+SCRIPT STRUCTURE:
+  #!/bin/bash          - Shebang (interpreter directive)
+  # Comments           - Explain your code
+  commands             - Script body
+  exit 0               - Exit with success status
+
+VARIABLES:
+  name="value"         - Assignment (NO spaces around =)
+  $name or ${name}     - Variable expansion
+  "$name"              - Quoted expansion (preserves spaces)
+  $1, $2, ...          - Positional parameters (arguments)
+  $#                   - Number of arguments
+  $@                   - All arguments as separate words
+  $*                   - All arguments as single word
+  $?                   - Exit status of last command
+  $$                   - Current script's PID
+
+EXIT CODES:
+  0                    - Success
+  1-255                - Various error conditions
+  exit N               - Exit with specific code
+            """,
+            "commands": [
+                {
+                    "name": "Basic Script Structure",
+                    "syntax": "#!/bin/bash\\n# Description\\ncommands\\nexit 0",
+                    "example": "#!/bin/bash\\necho 'Hello World'\\nexit 0",
+                    "flags": {
+                        "#!/bin/bash": "Shebang - specifies interpreter",
+                        "chmod +x": "Make script executable",
+                        "./script.sh": "Execute script",
+                        "bash script.sh": "Run with bash explicitly"
+                    }
+                },
+                {
+                    "name": "Conditionals (if/else)",
+                    "syntax": "if [ condition ]; then\\n  commands\\nfi",
+                    "example": "if [ -f /etc/passwd ]; then\\n  echo 'File exists'\\nfi",
+                    "flags": {
+                        "[ ]": "Test command (spaces required!)",
+                        "[[ ]]": "Extended test (bash-specific)",
+                        "-f file": "File exists and is regular file",
+                        "-d dir": "Directory exists",
+                        "-e path": "Path exists (file or dir)",
+                        "-r/-w/-x": "Readable/writable/executable",
+                        "-z string": "String is empty",
+                        "-n string": "String is not empty",
+                        "str1 = str2": "Strings are equal",
+                        "-eq/-ne/-lt/-gt/-le/-ge": "Numeric comparisons"
+                    }
+                },
+                {
+                    "name": "Loops (for)",
+                    "syntax": "for var in list; do\\n  commands\\ndone",
+                    "example": "for file in /etc/*.conf; do\\n  echo $file\\ndone",
+                    "flags": {
+                        "for i in 1 2 3": "Iterate over list",
+                        "for i in {1..10}": "Brace expansion range",
+                        "for i in $(seq 1 10)": "Command substitution",
+                        "for file in *.txt": "Glob patterns",
+                        "for arg in \"$@\"": "Iterate over arguments"
+                    }
+                },
+                {
+                    "name": "Loops (while)",
+                    "syntax": "while [ condition ]; do\\n  commands\\ndone",
+                    "example": "count=1\\nwhile [ $count -le 5 ]; do\\n  echo $count\\n  ((count++))\\ndone",
+                    "flags": {
+                        "while true": "Infinite loop",
+                        "while read line": "Read file line by line",
+                        "break": "Exit loop immediately",
+                        "continue": "Skip to next iteration"
+                    }
+                },
+                {
+                    "name": "Command-Line Arguments",
+                    "syntax": "$1, $2, $#, $@",
+                    "example": "#!/bin/bash\\necho \"Script: $0\"\\necho \"First arg: $1\"\\necho \"All args: $@\"\\necho \"Count: $#\"",
+                    "flags": {
+                        "$0": "Script name",
+                        "$1, $2, ...": "Positional arguments",
+                        "$#": "Number of arguments",
+                        "$@": "All arguments (preserves quoting)",
+                        "$*": "All arguments (single string)",
+                        "shift": "Shift arguments left"
+                    }
+                },
+                {
+                    "name": "Exit Codes",
+                    "syntax": "exit N",
+                    "example": "if [ ! -f \"$1\" ]; then\\n  echo 'File not found'\\n  exit 1\\nfi\\nexit 0",
+                    "flags": {
+                        "exit 0": "Success",
+                        "exit 1": "General error",
+                        "$?": "Check last exit code",
+                        "command && echo 'ok'": "Run if success",
+                        "command || echo 'failed'": "Run if failure"
+                    }
+                },
+                {
+                    "name": "Command Substitution",
+                    "syntax": "$(command) or `command`",
+                    "example": "today=$(date +%Y-%m-%d)\\nfiles=$(ls -1 | wc -l)",
+                    "flags": {
+                        "$(command)": "Preferred syntax",
+                        "`command`": "Legacy syntax (avoid)",
+                        "Nesting": "$(cmd1 $(cmd2)) works with $()"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Missing spaces in [ ] test: [ $a -eq 1 ] not [$a -eq 1]",
+                "Using = for numeric comparison (use -eq instead)",
+                "Forgetting quotes around variables with spaces",
+                "Missing shebang line (#!/bin/bash)",
+                "Script not executable (chmod +x needed)",
+                "Spaces around = in assignment: var=value not var = value",
+                "Using single [ ] with && or || (use [[ ]] instead)",
+                "Forgetting 'then' after if condition"
+            ],
+            "exam_tricks": [
+                "Always start with #!/bin/bash shebang",
+                "Always chmod +x your script",
+                "Test conditions: -f for files, -d for directories",
+                "Use \"$@\" (quoted) to preserve argument spacing",
+                "Exit 0 for success, non-zero for errors",
+                "Use $? to check if previous command succeeded",
+                "bash -n script.sh to check syntax without running"
+            ]
+        },
+
+        "packages": {
+            "name": "Package Management (dnf/rpm)",
+            "explanation": """
+Package management in RHEL 8/9 uses DNF (Dandified YUM) as the primary tool.
+RPM is the underlying package format. You must know how to install, remove,
+query packages, manage repositories, and work with module streams.
+
+KEY CONCEPTS:
+  Package: Software bundled with metadata (name-version-release.arch.rpm)
+  Repository: Collection of packages with metadata
+  Module Stream: Version stream of related packages (e.g., nodejs:18, php:8.1)
+  Group: Collection of packages installed together (e.g., "Development Tools")
+
+IMPORTANT DIRECTORIES:
+  /etc/yum.repos.d/       - Repository configuration files
+  /var/cache/dnf/         - Package cache
+  /var/log/dnf.log        - DNF transaction log
+            """,
+            "commands": [
+                {
+                    "name": "Install Package",
+                    "syntax": "dnf install <package>",
+                    "example": "dnf install httpd vim-enhanced",
+                    "flags": {
+                        "install": "Install package(s)",
+                        "-y": "Assume yes to prompts",
+                        "--downloadonly": "Download without installing",
+                        "reinstall": "Reinstall package"
+                    }
+                },
+                {
+                    "name": "Remove Package",
+                    "syntax": "dnf remove <package>",
+                    "example": "dnf remove httpd",
+                    "flags": {
+                        "remove": "Remove package and unused deps",
+                        "autoremove": "Remove orphaned dependencies",
+                        "-y": "Assume yes"
+                    }
+                },
+                {
+                    "name": "Search Packages",
+                    "syntax": "dnf search <keyword>",
+                    "example": "dnf search web server",
+                    "flags": {
+                        "search": "Search package names and descriptions",
+                        "provides": "Find which package provides a file",
+                        "info": "Show package details"
+                    }
+                },
+                {
+                    "name": "Query Installed (RPM)",
+                    "syntax": "rpm -q <package>",
+                    "example": "rpm -qa | grep httpd",
+                    "flags": {
+                        "-q": "Query package",
+                        "-qa": "Query all installed",
+                        "-qi": "Query info",
+                        "-ql": "Query file list",
+                        "-qf /path/file": "Which package owns file",
+                        "-qc": "Query config files",
+                        "-qd": "Query documentation files"
+                    }
+                },
+                {
+                    "name": "Repository Management",
+                    "syntax": "dnf repolist / dnf config-manager",
+                    "example": "dnf config-manager --enable powertools",
+                    "flags": {
+                        "repolist": "List enabled repos",
+                        "repolist all": "List all repos",
+                        "repoinfo": "Show repo details",
+                        "--enable": "Enable repository",
+                        "--disable": "Disable repository"
+                    }
+                },
+                {
+                    "name": "Package Groups",
+                    "syntax": "dnf group install '<group>'",
+                    "example": "dnf group install 'Development Tools'",
+                    "flags": {
+                        "group list": "List available groups",
+                        "group install": "Install group",
+                        "group remove": "Remove group",
+                        "group info": "Show group contents"
+                    }
+                },
+                {
+                    "name": "Module Streams",
+                    "syntax": "dnf module list/enable/install",
+                    "example": "dnf module enable nodejs:18\\ndnf module install nodejs:18",
+                    "flags": {
+                        "module list": "List available modules",
+                        "module enable": "Enable stream",
+                        "module disable": "Disable module",
+                        "module install": "Install module profile",
+                        "module reset": "Reset module state"
+                    }
+                },
+                {
+                    "name": "Transaction History",
+                    "syntax": "dnf history",
+                    "example": "dnf history\\ndnf history undo 15",
+                    "flags": {
+                        "history": "List transactions",
+                        "history info N": "Show transaction details",
+                        "history undo N": "Undo transaction",
+                        "history redo N": "Redo transaction"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Using yum instead of dnf (works but dnf is preferred)",
+                "Forgetting -y flag in scripts",
+                "Not enabling required repository",
+                "Wrong module stream syntax (use name:stream format)",
+                "Forgetting to run 'module enable' before 'module install'"
+            ],
+            "exam_tricks": [
+                "rpm -qf /path/to/file - find which package owns a file",
+                "dnf provides /path/to/file - find package that provides file",
+                "Module streams: enable first, then install",
+                "Group names often need quotes: 'Development Tools'",
+                "Check dnf history if something breaks - you can undo"
+            ]
+        },
+
+        "time_services": {
+            "name": "Time Services (Chrony/NTP)",
+            "explanation": """
+Time synchronization is critical for logging, authentication, and distributed
+systems. RHEL 8/9 uses chrony as the default NTP implementation.
+
+KEY CONCEPTS:
+  NTP: Network Time Protocol - synchronizes clocks
+  Chrony: Modern NTP implementation (replaced ntpd)
+  Timezone: Geographic time offset from UTC
+  Hardware Clock (RTC): System's hardware clock
+  System Clock: OS-maintained time
+
+KEY FILES:
+  /etc/chrony.conf        - Chrony configuration
+  /etc/localtime          - Symlink to timezone file
+  /usr/share/zoneinfo/    - Timezone database
+
+CHRONY TERMS:
+  server: Single NTP time source
+  pool: Multiple NTP servers (load balanced)
+  iburst: Fast initial synchronization
+  stratum: Distance from reference clock (1=atomic, 2=synced to 1, etc.)
+            """,
+            "commands": [
+                {
+                    "name": "Set Timezone",
+                    "syntax": "timedatectl set-timezone <zone>",
+                    "example": "timedatectl set-timezone America/New_York",
+                    "flags": {
+                        "set-timezone": "Set system timezone",
+                        "list-timezones": "List available timezones",
+                        "timedatectl": "Show current settings"
+                    }
+                },
+                {
+                    "name": "Enable NTP Sync",
+                    "syntax": "timedatectl set-ntp true",
+                    "example": "timedatectl set-ntp true",
+                    "flags": {
+                        "set-ntp true": "Enable NTP synchronization",
+                        "set-ntp false": "Disable NTP (for manual time)",
+                        "Requires": "chronyd or ntpd service running"
+                    }
+                },
+                {
+                    "name": "Configure Chrony",
+                    "syntax": "Edit /etc/chrony.conf",
+                    "example": "server time.example.com iburst\\npool pool.ntp.org iburst",
+                    "flags": {
+                        "server <host>": "Add NTP server",
+                        "pool <host>": "Add NTP pool",
+                        "iburst": "Fast initial sync",
+                        "prefer": "Prefer this source"
+                    }
+                },
+                {
+                    "name": "Check Chrony Status",
+                    "syntax": "chronyc sources / tracking",
+                    "example": "chronyc sources -v",
+                    "flags": {
+                        "sources": "Show NTP sources",
+                        "sources -v": "Verbose source info",
+                        "tracking": "Show sync status",
+                        "activity": "Show server activity"
+                    }
+                },
+                {
+                    "name": "Manage Chrony Service",
+                    "syntax": "systemctl enable --now chronyd",
+                    "example": "systemctl enable --now chronyd",
+                    "flags": {
+                        "enable --now": "Enable and start",
+                        "restart chronyd": "Apply config changes",
+                        "status chronyd": "Check service status"
+                    }
+                },
+                {
+                    "name": "Set Time Manually",
+                    "syntax": "timedatectl set-time 'YYYY-MM-DD HH:MM:SS'",
+                    "example": "timedatectl set-ntp false\\ntimedatectl set-time '2025-06-15 14:30:00'",
+                    "flags": {
+                        "set-time": "Set date and time",
+                        "Requires": "NTP must be disabled first",
+                        "Format": "YYYY-MM-DD HH:MM:SS"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Forgetting to restart chronyd after config changes",
+                "Not enabling chronyd service (not persistent)",
+                "Trying to set time with NTP enabled (must disable first)",
+                "Wrong timezone format (use timedatectl list-timezones)",
+                "Forgetting iburst option (slow initial sync)"
+            ],
+            "exam_tricks": [
+                "Always use iburst for faster initial sync",
+                "timedatectl shows everything: timezone, NTP, sync status",
+                "chronyc sources shows * for selected source",
+                "After editing /etc/chrony.conf, restart chronyd",
+                "Timezone is persistent automatically"
+            ]
+        },
+
+        "partitioning": {
+            "name": "Disk Partitioning (fdisk/parted)",
+            "explanation": """
+Disk partitioning creates separate regions on storage devices. RHEL supports
+MBR (Master Boot Record) and GPT (GUID Partition Table) schemes.
+
+MBR vs GPT:
+  MBR (msdos):
+    - Up to 4 primary partitions (or 3 primary + 1 extended)
+    - Maximum disk size: 2TB
+    - Legacy BIOS boot
+
+  GPT (GUID):
+    - Up to 128 partitions
+    - Maximum disk size: 9.4 ZB (practically unlimited)
+    - Required for UEFI boot
+    - Includes backup partition table
+
+PARTITION TYPES:
+  Linux filesystem (83/8300): Standard Linux partitions
+  Linux LVM (8e/8e00): For LVM physical volumes
+  Linux swap (82/8200): Swap partitions
+  EFI System (ef00): EFI boot partitions
+
+TOOLS:
+  fdisk: Interactive MBR/GPT partitioning
+  parted: Scriptable MBR/GPT partitioning
+  gdisk: GPT-specific tool
+  partprobe: Update kernel partition table
+            """,
+            "commands": [
+                {
+                    "name": "View Partition Table",
+                    "syntax": "fdisk -l <device> / parted <device> print",
+                    "example": "fdisk -l /dev/sdb\\nparted /dev/sdb print",
+                    "flags": {
+                        "fdisk -l": "List partitions (all or specific disk)",
+                        "parted print": "Show partition table",
+                        "lsblk": "Tree view of block devices"
+                    }
+                },
+                {
+                    "name": "Create Partition (fdisk)",
+                    "syntax": "fdisk <device>",
+                    "example": "fdisk /dev/sdb\\n  n (new)\\n  p (primary)\\n  1 (number)\\n  <enter> (default start)\\n  +500M (size)\\n  w (write)",
+                    "flags": {
+                        "n": "New partition",
+                        "p": "Primary partition",
+                        "e": "Extended partition",
+                        "t": "Change partition type",
+                        "d": "Delete partition",
+                        "w": "Write changes and exit",
+                        "q": "Quit without saving"
+                    }
+                },
+                {
+                    "name": "Create Partition (parted)",
+                    "syntax": "parted <device> mkpart <type> <fstype> <start> <end>",
+                    "example": "parted /dev/sdb mkpart primary ext4 0% 500MiB",
+                    "flags": {
+                        "mklabel gpt/msdos": "Create partition table",
+                        "mkpart": "Create partition",
+                        "rm N": "Remove partition N",
+                        "print": "Show partitions",
+                        "set N lvm on": "Set LVM flag"
+                    }
+                },
+                {
+                    "name": "Create GPT Label",
+                    "syntax": "parted <device> mklabel gpt",
+                    "example": "parted /dev/sdb mklabel gpt\\nparted /dev/sdb mkpart data ext4 0% 100%",
+                    "flags": {
+                        "mklabel gpt": "Create GPT partition table",
+                        "mklabel msdos": "Create MBR partition table",
+                        "WARNING": "Destroys all existing partitions!"
+                    }
+                },
+                {
+                    "name": "Set LVM Type",
+                    "syntax": "fdisk: t, 8e / parted: set N lvm on",
+                    "example": "parted /dev/sdb set 1 lvm on",
+                    "flags": {
+                        "fdisk t, 8e": "Set type to Linux LVM",
+                        "parted set N lvm on": "Enable LVM flag",
+                        "Required for": "LVM physical volumes"
+                    }
+                },
+                {
+                    "name": "Update Kernel",
+                    "syntax": "partprobe <device>",
+                    "example": "partprobe /dev/sdb",
+                    "flags": {
+                        "partprobe": "Inform kernel of partition changes",
+                        "Without device": "Scans all disks",
+                        "Required after": "Creating/deleting partitions"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Forgetting to run partprobe after changes",
+                "Wrong partition type for LVM (must be 8e)",
+                "Creating MBR when GPT is needed (>2TB disk)",
+                "Forgetting to write changes in fdisk (w command)",
+                "Partition table type mismatch with boot mode (UEFI needs GPT)"
+            ],
+            "exam_tricks": [
+                "parted is scriptable: parted -s /dev/sdb mkpart ...",
+                "For LVM: create partition, set type to 8e, then pvcreate",
+                "partprobe updates kernel without reboot",
+                "GPT allows more partitions and larger disks",
+                "Check with lsblk after partitioning"
+            ]
+        },
+
+        "ssh": {
+            "name": "SSH Configuration",
+            "explanation": """
+SSH (Secure Shell) provides encrypted remote access. The RHCSA tests key-based
+authentication, SSH client configuration, and basic SSH server security.
+
+KEY CONCEPTS:
+  Key-based auth: More secure than passwords
+  Public key: Shared with remote servers (~/.ssh/id_*.pub)
+  Private key: Kept secret (~/.ssh/id_*)
+  authorized_keys: Lists public keys allowed to connect
+
+KEY FILES:
+  ~/.ssh/id_rsa           - Private key (RSA)
+  ~/.ssh/id_ed25519       - Private key (Ed25519)
+  ~/.ssh/*.pub            - Public keys
+  ~/.ssh/authorized_keys  - Accepted public keys
+  ~/.ssh/config           - Client configuration
+  /etc/ssh/sshd_config    - Server configuration
+
+PERMISSIONS (Critical!):
+  ~/.ssh/                 - 700 (drwx------)
+  ~/.ssh/id_*             - 600 (-rw-------)
+  ~/.ssh/*.pub            - 644 (-rw-r--r--)
+  ~/.ssh/authorized_keys  - 600 (-rw-------)
+            """,
+            "commands": [
+                {
+                    "name": "Generate SSH Key",
+                    "syntax": "ssh-keygen -t <type> [-f <path>] [-N '<passphrase>']",
+                    "example": "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''",
+                    "flags": {
+                        "-t rsa": "RSA key (traditional)",
+                        "-t ed25519": "Ed25519 key (modern, preferred)",
+                        "-f path": "Output file path",
+                        "-N ''": "Empty passphrase (for automation)",
+                        "-b 4096": "Key size (RSA only)"
+                    }
+                },
+                {
+                    "name": "Copy Key to Server",
+                    "syntax": "ssh-copy-id [-i <key>] <user>@<host>",
+                    "example": "ssh-copy-id -i ~/.ssh/id_ed25519.pub user@server",
+                    "flags": {
+                        "ssh-copy-id": "Copy public key to remote",
+                        "-i": "Specify key file",
+                        "Adds to": "~/.ssh/authorized_keys on remote"
+                    }
+                },
+                {
+                    "name": "Manual Key Copy",
+                    "syntax": "cat ~/.ssh/id_*.pub >> ~/.ssh/authorized_keys",
+                    "example": "mkdir -p ~/.ssh\\nchmod 700 ~/.ssh\\ncat /tmp/key.pub >> ~/.ssh/authorized_keys\\nchmod 600 ~/.ssh/authorized_keys",
+                    "flags": {
+                        "mkdir -p ~/.ssh": "Create directory",
+                        "chmod 700": "Directory permissions",
+                        "chmod 600": "Key file permissions",
+                        "chown user:user": "Fix ownership"
+                    }
+                },
+                {
+                    "name": "SSH Client Config",
+                    "syntax": "~/.ssh/config",
+                    "example": "Host webserver\\n    HostName server1.example.com\\n    User admin\\n    IdentityFile ~/.ssh/id_ed25519",
+                    "flags": {
+                        "Host <alias>": "Connection alias",
+                        "HostName": "Actual hostname/IP",
+                        "User": "Remote username",
+                        "IdentityFile": "Private key to use",
+                        "Port": "SSH port (default 22)"
+                    }
+                },
+                {
+                    "name": "Secure SSHD",
+                    "syntax": "Edit /etc/ssh/sshd_config",
+                    "example": "PermitRootLogin no\\nPasswordAuthentication no",
+                    "flags": {
+                        "PermitRootLogin no": "Disable root SSH login",
+                        "PasswordAuthentication no": "Require key-based auth",
+                        "Port 2222": "Change SSH port",
+                        "AllowUsers user1 user2": "Whitelist users"
+                    }
+                },
+                {
+                    "name": "Restart SSHD",
+                    "syntax": "systemctl restart sshd",
+                    "example": "systemctl restart sshd",
+                    "flags": {
+                        "restart": "Apply config changes",
+                        "reload": "Reload without disconnect",
+                        "status": "Check service status"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Wrong permissions on .ssh directory (must be 700)",
+                "Wrong permissions on private key (must be 600)",
+                "Copying private key instead of public key",
+                "Not restarting sshd after config changes",
+                "Locking yourself out by disabling password before setting up keys"
+            ],
+            "exam_tricks": [
+                "ed25519 is modern and preferred over RSA",
+                "-N '' sets empty passphrase (no prompt)",
+                "ssh-copy-id is easiest way to deploy keys",
+                "Test SSH access before disabling password auth!",
+                "chmod 600 for private keys, 644 for public keys"
+            ]
+        },
+
+        "storage": {
+            "name": "Advanced Storage (RAID/Stratis)",
+            "explanation": """
+Advanced storage includes RAID arrays for redundancy and Stratis for
+modern storage management. RAID provides fault tolerance, while Stratis
+offers easy-to-use pooled storage with snapshots.
+
+RAID LEVELS:
+  RAID 0: Striping (no redundancy, max performance)
+  RAID 1: Mirroring (2+ disks, 50% capacity)
+  RAID 5: Striping with parity (3+ disks, n-1 capacity)
+  RAID 6: Dual parity (4+ disks, n-2 capacity)
+  RAID 10: Mirrored stripes (4+ disks, 50% capacity)
+
+STRATIS CONCEPTS:
+  Pool: Collection of block devices
+  Filesystem: XFS filesystems on pools
+  Snapshots: Point-in-time copies
+
+KEY FILES:
+  /etc/mdadm.conf         - RAID configuration
+  /proc/mdstat            - RAID status
+  /dev/md*                - RAID devices
+  /dev/stratis/<pool>/<fs> - Stratis filesystems
+            """,
+            "commands": [
+                {
+                    "name": "Create RAID Array",
+                    "syntax": "mdadm --create /dev/md0 --level=N --raid-devices=N <devices>",
+                    "example": "mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sdb1 /dev/sdc1",
+                    "flags": {
+                        "--create": "Create new array",
+                        "--level": "RAID level (0,1,5,6,10)",
+                        "--raid-devices": "Number of devices",
+                        "--spare-devices": "Number of spares"
+                    }
+                },
+                {
+                    "name": "Check RAID Status",
+                    "syntax": "cat /proc/mdstat / mdadm --detail /dev/md0",
+                    "example": "mdadm --detail /dev/md0",
+                    "flags": {
+                        "/proc/mdstat": "Quick status overview",
+                        "--detail": "Detailed array info",
+                        "--examine": "Examine device superblock"
+                    }
+                },
+                {
+                    "name": "Save RAID Config",
+                    "syntax": "mdadm --detail --scan >> /etc/mdadm.conf",
+                    "example": "mdadm --detail --scan >> /etc/mdadm.conf\\ndracut -f",
+                    "flags": {
+                        "--detail --scan": "Generate config line",
+                        "/etc/mdadm.conf": "Persistent config",
+                        "dracut -f": "Rebuild initramfs"
+                    }
+                },
+                {
+                    "name": "Stop/Remove RAID",
+                    "syntax": "mdadm --stop /dev/md0",
+                    "example": "umount /mnt/raid\\nmdadm --stop /dev/md0\\nmdadm --zero-superblock /dev/sdb1 /dev/sdc1",
+                    "flags": {
+                        "--stop": "Stop array",
+                        "--zero-superblock": "Clear RAID metadata",
+                        "Unmount first": "Must unmount before stop"
+                    }
+                },
+                {
+                    "name": "Create Stratis Pool",
+                    "syntax": "stratis pool create <poolname> <devices>",
+                    "example": "stratis pool create datapool /dev/sdb /dev/sdc",
+                    "flags": {
+                        "pool create": "Create storage pool",
+                        "pool list": "List pools",
+                        "pool add-data": "Add devices to pool"
+                    }
+                },
+                {
+                    "name": "Create Stratis Filesystem",
+                    "syntax": "stratis filesystem create <pool> <fsname>",
+                    "example": "stratis filesystem create datapool data1\\nmount /dev/stratis/datapool/data1 /mnt",
+                    "flags": {
+                        "filesystem create": "Create filesystem on pool",
+                        "filesystem list": "List filesystems",
+                        "filesystem snapshot": "Create snapshot"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Not saving RAID config to /etc/mdadm.conf (lost on reboot)",
+                "Forgetting to rebuild initramfs after RAID config",
+                "Not enabling stratisd service",
+                "Wrong mount options for Stratis in fstab",
+                "Forgetting to unmount before stopping RAID"
+            ],
+            "exam_tricks": [
+                "RAID 1 requires 2+ devices, RAID 5 requires 3+",
+                "Save RAID config: mdadm --detail --scan >> /etc/mdadm.conf",
+                "Stratis filesystems are XFS automatically",
+                "Stratis fstab needs: x-systemd.requires=stratisd.service",
+                "Check RAID sync: cat /proc/mdstat"
+            ]
+        },
+
+        "network_storage": {
+            "name": "Network Storage (NFS/CIFS/Autofs)",
+            "explanation": """
+Network storage allows mounting remote filesystems. NFS is for Linux-to-Linux,
+CIFS/SMB is for Windows shares. Autofs provides on-demand mounting.
+
+NFS (Network File System):
+  - Native Linux network filesystem
+  - Uses showmount to discover exports
+  - Mount options: rw, ro, sync, soft, hard
+
+CIFS/SMB (Common Internet File System):
+  - Windows-compatible network shares
+  - Requires cifs-utils package
+  - Uses credentials file for security
+
+AUTOFS:
+  - Automatic mount on access
+  - Unmounts after timeout
+  - Configured in /etc/auto.master
+
+KEY FILES:
+  /etc/fstab              - Persistent mounts
+  /etc/auto.master        - Autofs master map
+  /etc/auto.*             - Autofs submaps
+  /etc/cifs-credentials   - CIFS credentials file
+            """,
+            "commands": [
+                {
+                    "name": "List NFS Exports",
+                    "syntax": "showmount -e <server>",
+                    "example": "showmount -e nfs.example.com",
+                    "flags": {
+                        "-e": "Show exports",
+                        "-a": "Show all mounts",
+                        "Requires": "nfs-utils package"
+                    }
+                },
+                {
+                    "name": "Mount NFS Share",
+                    "syntax": "mount -t nfs <server>:<export> <mountpoint>",
+                    "example": "mount -t nfs server:/data /mnt/nfs",
+                    "flags": {
+                        "-t nfs": "NFS filesystem type",
+                        "-o rw": "Read-write mount",
+                        "-o ro": "Read-only mount",
+                        "-o sync": "Synchronous writes"
+                    }
+                },
+                {
+                    "name": "NFS fstab Entry",
+                    "syntax": "server:/export /mount nfs defaults 0 0",
+                    "example": "nfs.example.com:/data /mnt/nfs nfs defaults,_netdev 0 0",
+                    "flags": {
+                        "_netdev": "Wait for network (recommended)",
+                        "defaults": "Standard mount options",
+                        "rw,sync": "Custom options"
+                    }
+                },
+                {
+                    "name": "Mount CIFS Share",
+                    "syntax": "mount -t cifs //<server>/<share> <mountpoint> -o credentials=<file>",
+                    "example": "mount -t cifs //server/share /mnt/cifs -o credentials=/etc/cifs-creds",
+                    "flags": {
+                        "-t cifs": "CIFS filesystem type",
+                        "-o credentials=": "Credentials file path",
+                        "-o username=,password=": "Inline credentials (insecure)"
+                    }
+                },
+                {
+                    "name": "CIFS Credentials File",
+                    "syntax": "/etc/cifs-credentials",
+                    "example": "username=smbuser\\npassword=secret\\ndomain=WORKGROUP\\n\\nchmod 600 /etc/cifs-credentials",
+                    "flags": {
+                        "username=": "SMB username",
+                        "password=": "SMB password",
+                        "domain=": "Windows domain",
+                        "chmod 600": "Secure the file!"
+                    }
+                },
+                {
+                    "name": "Configure Autofs",
+                    "syntax": "Edit /etc/auto.master and submaps",
+                    "example": "# /etc/auto.master\\n/mnt/auto  /etc/auto.nfs\\n\\n# /etc/auto.nfs\\ndata  -rw,sync  server:/data",
+                    "flags": {
+                        "/etc/auto.master": "Master map file",
+                        "Mount point": "Parent directory",
+                        "Map file": "Submap with mount definitions",
+                        "Key": "Subdirectory name",
+                        "Options": "Mount options",
+                        "Location": "server:/export"
+                    }
+                },
+                {
+                    "name": "Autofs Home Directories",
+                    "syntax": "/etc/auto.master with wildcard",
+                    "example": "# /etc/auto.master\\n/home/remote  /etc/auto.home\\n\\n# /etc/auto.home\\n*  -rw  nfs:/home/&",
+                    "flags": {
+                        "*": "Wildcard - match any key",
+                        "&": "Substitute matched key",
+                        "Result": "/home/remote/user mounts nfs:/home/user"
+                    }
+                },
+                {
+                    "name": "Enable Autofs",
+                    "syntax": "systemctl enable --now autofs",
+                    "example": "systemctl enable --now autofs",
+                    "flags": {
+                        "enable --now": "Enable and start",
+                        "restart": "Apply config changes",
+                        "status": "Check service status"
+                    }
+                }
+            ],
+            "common_mistakes": [
+                "Forgetting _netdev option for network mounts in fstab",
+                "Wrong permissions on credentials file (must be 600)",
+                "Not installing cifs-utils for CIFS mounts",
+                "Autofs syntax errors (check with automount -v)",
+                "Not restarting autofs after config changes"
+            ],
+            "exam_tricks": [
+                "NFS: showmount -e server to see exports",
+                "CIFS: use credentials file, chmod 600",
+                "Autofs: * and & for home directory wildcards",
+                "fstab: use _netdev for network filesystems",
+                "Test autofs: ls /mnt/auto/mountname triggers mount"
+            ]
         }
     }
 

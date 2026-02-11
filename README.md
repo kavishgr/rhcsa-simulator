@@ -228,20 +228,36 @@ For best results, follow this progression:
 
 ## Task Categories
 
-The simulator covers all RHCSA exam objectives:
+The simulator covers **100% of RHCSA EX200 exam objectives**:
 
+### Core System Administration
 1. **Essential Tools** - find, grep, tar, archives
 2. **Users & Groups** - user/group management, sudo
 3. **Permissions** - chmod, chown, ACLs, special bits
-4. **LVM** - physical volumes, volume groups, logical volumes
-5. **File Systems** - create, mount, fstab, XFS, ext4
-6. **Networking** - interface configuration, DNS, hostnames
-7. **SELinux** - contexts, booleans, modes
-8. **Services** - systemd service management
-9. **Boot Targets** - multi-user, graphical targets
-10. **Processes** - process management, priorities
-11. **Scheduling** - cron, at, systemd timers
-12. **Containers** - Podman basics
+4. **Services** - systemd service management
+5. **Boot Targets** - multi-user, graphical targets
+6. **Processes** - process management, priorities
+7. **Scheduling** - cron, at, systemd timers
+
+### Storage Management
+8. **LVM** - physical volumes, volume groups, logical volumes
+9. **File Systems** - create, mount, fstab, XFS, ext4
+10. **Disk Partitioning** - fdisk, parted, GPT/MBR
+11. **RAID** - mdadm arrays, persistent configuration
+12. **Advanced Storage** - Stratis, thin provisioning, swap
+
+### Networking & Security
+13. **Networking** - interface configuration, DNS, hostnames
+14. **SELinux** - contexts, booleans, modes
+15. **SSH** - key generation, authorized_keys, sshd security
+16. **Firewall** - firewalld zones, services, ports
+
+### Additional Topics
+17. **Shell Scripting** - bash scripts, conditionals, loops, arguments
+18. **Package Management** - dnf, rpm, repos, module streams
+19. **Time Services** - chrony, NTP, timezone configuration
+20. **Network Storage** - NFS mounts, autofs, CIFS/SMB
+21. **Containers** - Podman basics
 
 ## Example Tasks
 
@@ -400,10 +416,10 @@ sudo rm /var/lib/rhcsa-simulator/loops/*.img
 ## Development
 
 ### Project Stats
-- **Lines of Code**: ~12,000+
-- **Task Categories**: 14
-- **Task Types**: 137 tasks covering all RHCSA objectives
-- **Validators**: 70+ validation functions
+- **Lines of Code**: ~16,000+
+- **Task Categories**: 21
+- **Task Types**: 178 tasks covering 100% of RHCSA objectives
+- **Validators**: 90+ validation functions
 - **Modes**: 8 (Learn, Guided Practice, Command Recall, Exam, Practice, Scenario, Troubleshoot, Flashcards)
 - **Dependencies**: 0 (Python stdlib only, optional: anthropic for AI feedback)
 
@@ -447,9 +463,20 @@ This is an educational tool for RHCSA exam preparation. Use at your own risk on 
 
 ## Version
 
-**v3.0.0** - Auto-Cleanup & Content Expansion (Current)
+**v3.0.0** - 100% RHCSA Coverage Release (Current)
+- **178 tasks**: 41 new tasks for complete RHCSA EX200 coverage
+- **Shell Scripting**: 6 tasks (conditionals, loops, arguments, exit codes)
+- **Package Management**: 8 tasks (dnf, rpm, repos, module streams)
+- **NFS/Autofs**: 6 tasks (mounts, autofs, home directories)
+- **Time Services**: 5 tasks (chrony, NTP, timezone)
+- **Disk Partitioning**: 5 tasks (fdisk, parted, GPT/MBR)
+- **SSH**: 4 tasks (keys, authorized_keys, sshd security)
+- **RAID**: 4 tasks (create, persist, manage, remove)
+- **SMB/CIFS**: 2 tasks (mount shares, credentials)
+- **Enhanced validation**: New safe commands for all new task types
+
+**v2.5.0** - Auto-Cleanup & Content Expansion
 - **DeviceManager**: Automatic cleanup of LVM/disk resources between tasks
-- **137 tasks**: 60 new tasks across all categories
 - **Comprehensive boot training**: 14 boot tasks including password reset procedure practice
 - **Expanded learning content**: Detailed boot/recovery section with rd.break walkthrough
 - **Bug fixes**: Fixed f-string hints, command recall evaluation

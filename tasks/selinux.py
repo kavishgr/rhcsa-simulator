@@ -292,7 +292,7 @@ class SetSELinuxModeTask(BaseTask):
         # Check 2: Persistent configuration (3 points)
         result = execute_safe(['grep', '^SELINUX=', '/etc/selinux/config'])
         if result.success:
-            expected_line = f"SELINUX={self.mode.lower()}"
+            expected_line = f"selinux={self.mode.lower()}"
             if expected_line in result.stdout.lower():
                 checks.append(ValidationCheck(
                     name="persistent_mode",

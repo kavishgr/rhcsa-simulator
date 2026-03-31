@@ -20,8 +20,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _random_device():
-    """Return a randomized practice disk device path."""
-    return random.choice(['/dev/sdb', '/dev/sdc', '/dev/sdd', '/dev/vdb', '/dev/vdc'])
+    """Return a practice disk device path that actually exists on the system.
+
+    Uses the smart device detection from helpers (DeviceManager -> raw block
+    devices -> loop devices -> create loop devices) so that partitioning tasks
+    never reference a device the student cannot use.
+    """
+    try:
+        from utils.helpers import get_practice_device
+        device = get_practice_device()
+        if device:
+            return device
+    except Exception:
+        pass
+    # Last-resort fallback so tasks can still display a description
+    return '/dev/sdb'
 
 
 def _partition_dev(device, number):
